@@ -11,6 +11,7 @@ interface BookingRequestBody {
   paymentIntentId?: string;
   customerEmail?: string;
   customerName?: string;
+  customerPhone?: string;
   flight?: {
     airline: string;
     flightNumber: string;
@@ -24,6 +25,24 @@ interface BookingRequestBody {
     location?: string;
     checkIn?: string;
     checkOut?: string;
+  };
+  travelers?: Array<{
+    firstName: string;
+    lastName: string;
+    dateOfBirth?: string;
+    email?: string;
+    phoneCountryCode?: string;
+    phoneNumber?: string;
+    nationality?: string;
+    passportNumber?: string;
+    passportExpiry?: string;
+    passportIssuanceCountry?: string;
+  }>;
+  amadeusFlightOffer?: unknown;
+  amadeusHotelOffer?: {
+    offerId: string;
+    hotelId?: string;
+    raw?: unknown;
   };
 }
 
@@ -54,9 +73,13 @@ export async function POST(request: Request) {
       },
       customerEmail: body.customerEmail,
       customerName: body.customerName,
+      customerPhone: body.customerPhone,
       paymentIntentId: body.paymentIntentId,
       flight: body.flight,
       stay: body.stay,
+      travelers: body.travelers,
+      amadeusFlightOffer: body.amadeusFlightOffer,
+      amadeusHotelOffer: body.amadeusHotelOffer,
     });
 
     await sendBookingConfirmationEmail({ receipt });

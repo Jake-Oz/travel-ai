@@ -44,6 +44,55 @@ function toMajorUnits(amount: number, currency: string): number {
   return Math.round((amount / divisor) * 100) / 100;
 }
 
+function splitFullName(fullName?: string | null): {
+  firstName?: string;
+  lastName?: string;
+} {
+  if (!fullName) return {};
+  const parts = fullName.trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return {};
+  if (parts.length === 1) {
+    return { firstName: parts[0] };
+  }
+  return {
+    firstName: parts.slice(0, -1).join(" "),
+    lastName: parts[parts.length - 1],
+  };
+}
+
+function derivePhoneComponents(phone?: string | null): {
+  countryCode?: string;
+  number?: string;
+} {
+  if (!phone) return {};
+  const trimmed = phone.trim();
+  if (!trimmed) return {};
+  const digits = trimmed.replace(/[^0-9+]/g, "");
+  if (!digits) return {};
+  if (digits.startsWith("+")) {
+    const withoutPlus = digits.slice(1);
+    if (withoutPlus.length <= 3) {
+      return { countryCode: withoutPlus || undefined };
+    }
+    if (withoutPlus.startsWith("1")) {
+      const number = withoutPlus.slice(1);
+      return {
+        countryCode: "1",
+        number: number || undefined,
+      };
+    }
+    const countryCode = withoutPlus.slice(0, 2);
+    const number = withoutPlus.slice(2);
+    return {
+      countryCode: countryCode || undefined,
+      number: number || undefined,
+    };
+  }
+  return {
+    number: digits,
+  };
+}
+
 interface BookingSheetProps {
   itinerary: ItineraryPackage;
   onClose: () => void;
@@ -68,6 +117,46 @@ export function BookingSheet({
   const [paymentError, setPaymentError] = useState<string | undefined>();
   const [intentAmount, setIntentAmount] = useState<number | undefined>();
   const [walletWarning, setWalletWarning] = useState<string | undefined>();
+  const [travelerFirstName, setTravelerFirstName] = useState<string>("");
+  const [travelerLastName, setTravelerLastName] = useState<string>("");
+  const [travelerDateOfBirth, setTravelerDateOfBirth] = useState<string>("");
+  const [travelerNationality, setTravelerNationality] = useState<string>("AU");
+  const [travelerPassportNumber, setTravelerPassportNumber] =
+    useState<string>("");
+  const [travelerPassportExpiry, setTravelerPassportExpiry] =
+    useState<string>("");
+  const [travelerPassportIssuanceCountry, setTravelerPassportIssuanceCountry] =
+    useState<string>("AU");
+  const [customerEmail, setCustomerEmail] = useState<string>("");
+  const [customerPhone, setCustomerPhone] = useState<string>("");
+  const applyPaymentContact = useCallback(
+    ({
+      name,
+      email,
+      phone,
+    }: {
+      name?: string | null;
+      email?: string | null;
+      phone?: string | null;
+    }) => {
+      if (email && !customerEmail) {
+        setCustomerEmail(email);
+      }
+      if (phone && !customerPhone) {
+        setCustomerPhone(phone);
+      }
+      if (name) {
+        const { firstName, lastName } = splitFullName(name);
+        if (firstName && !travelerFirstName) {
+          setTravelerFirstName(firstName);
+        }
+        if (lastName && !travelerLastName) {
+          setTravelerLastName(lastName);
+        }
+      }
+    },
+    [customerEmail, customerPhone, travelerFirstName, travelerLastName]
+  );
   const currency = (itinerary.totalPrice.currency ?? "AUD").toUpperCase();
   const stripeMode = (
     process.env.NEXT_PUBLIC_STRIPE_MODE ?? "test"
@@ -107,6 +196,31 @@ export function BookingSheet({
     ): BookingConfirmationPayload => {
       const firstLeg = itinerary.flight.legs[0];
       const lastLeg = itinerary.flight.legs[itinerary.flight.legs.length - 1];
+      const trimmedFirstName = travelerFirstName.trim();
+      const trimmedLastName = travelerLastName.trim();
+      const trimmedEmail = customerEmail.trim();
+      const trimmedPhone = customerPhone.trim();
+      const composedPhone = trimmedPhone;
+      const phoneComponents = derivePhoneComponents(composedPhone);
+
+      const travelers =
+        trimmedFirstName && trimmedLastName
+          ? [
+              {
+                firstName: trimmedFirstName,
+                lastName: trimmedLastName,
+                dateOfBirth: travelerDateOfBirth || undefined,
+                email: trimmedEmail || undefined,
+                phoneCountryCode: phoneComponents.countryCode,
+                phoneNumber: phoneComponents.number,
+                nationality: travelerNationality.trim() || undefined,
+                passportNumber: travelerPassportNumber.trim() || undefined,
+                passportExpiry: travelerPassportExpiry || undefined,
+                passportIssuanceCountry:
+                  travelerPassportIssuanceCountry.trim() || undefined,
+              },
+            ]
+          : undefined;
 
       return {
         itineraryId: itinerary.id,
@@ -115,6 +229,21 @@ export function BookingSheet({
           amount: itinerary.totalPrice.amount,
           currency,
         },
+        customerEmail: trimmedEmail || undefined,
+        customerName:
+          trimmedFirstName && trimmedLastName
+            ? `${trimmedFirstName} ${trimmedLastName}`
+            : overrides.customerName,
+        customerPhone: composedPhone || undefined,
+        travelers,
+        amadeusFlightOffer: itinerary.flight.amadeus?.raw,
+        amadeusHotelOffer: itinerary.lodging.amadeus
+          ? {
+              offerId: itinerary.lodging.amadeus.offerId,
+              hotelId: itinerary.lodging.amadeus.hotelId,
+              raw: itinerary.lodging.amadeus.raw,
+            }
+          : undefined,
         flight: {
           airline: itinerary.flight.airline,
           flightNumber: itinerary.flight.flightNumber,
@@ -132,7 +261,19 @@ export function BookingSheet({
         ...overrides,
       };
     },
-    [currency, itinerary]
+    [
+      currency,
+      customerEmail,
+      customerPhone,
+      itinerary,
+      travelerDateOfBirth,
+      travelerFirstName,
+      travelerLastName,
+      travelerNationality,
+      travelerPassportExpiry,
+      travelerPassportIssuanceCountry,
+      travelerPassportNumber,
+    ]
   );
 
   const handleFinalize = useCallback(
@@ -150,11 +291,40 @@ export function BookingSheet({
         };
       }
 
-      return finalizeBooking({
+      const mergedPayload: BookingConfirmationPayload = {
         ...basePayload,
         ...overrides,
         chargedAmount,
-      });
+      };
+
+      if (!mergedPayload.customerPhone && basePayload.customerPhone) {
+        mergedPayload.customerPhone = basePayload.customerPhone;
+      }
+
+      if (
+        (!mergedPayload.travelers || mergedPayload.travelers.length === 0) &&
+        mergedPayload.customerName
+      ) {
+        const { firstName, lastName } = splitFullName(
+          mergedPayload.customerName
+        );
+        const phoneComponents = derivePhoneComponents(
+          mergedPayload.customerPhone
+        );
+        if (firstName && lastName) {
+          mergedPayload.travelers = [
+            {
+              firstName,
+              lastName,
+              email: mergedPayload.customerEmail,
+              phoneCountryCode: phoneComponents.countryCode,
+              phoneNumber: phoneComponents.number,
+            },
+          ];
+        }
+      }
+
+      return finalizeBooking(mergedPayload);
     },
     [buildBookingPayload, finalizeBooking]
   );
@@ -175,6 +345,12 @@ export function BookingSheet({
     intent?: PaymentIntent | null
   ): string | undefined =>
     event.payerName ?? intent?.shipping?.name ?? undefined;
+
+  const resolveCustomerPhone = (
+    event: PaymentRequestPaymentMethodEvent,
+    intent?: PaymentIntent | null
+  ): string | undefined =>
+    event.payerPhone ?? intent?.shipping?.phone ?? undefined;
 
   useEffect(() => {
     let isMounted = true;
@@ -301,22 +477,35 @@ export function BookingSheet({
 
                 const paymentIntent =
                   finalResult.paymentIntent ?? confirmation.paymentIntent;
+                const resolvedIntent =
+                  paymentIntent ?? confirmation.paymentIntent ?? null;
+                const resolvedEmail = resolveCustomerEmail(
+                  event,
+                  resolvedIntent
+                );
+                const resolvedName = resolveCustomerName(event, resolvedIntent);
+                const resolvedPhone = resolveCustomerPhone(
+                  event,
+                  resolvedIntent
+                );
+
+                applyPaymentContact({
+                  name: resolvedName,
+                  email: resolvedEmail,
+                  phone: resolvedPhone,
+                });
+
                 const receipt = await handleFinalize(
                   {
                     paymentIntentId: resolvePaymentIntentId(
                       paymentIntent,
                       confirmation.paymentIntent
                     ),
-                    customerEmail: resolveCustomerEmail(
-                      event,
-                      paymentIntent ?? confirmation.paymentIntent ?? null
-                    ),
-                    customerName: resolveCustomerName(
-                      event,
-                      paymentIntent ?? confirmation.paymentIntent ?? null
-                    ),
+                    customerEmail: resolvedEmail,
+                    customerName: resolvedName,
+                    customerPhone: resolvedPhone,
                   },
-                  paymentIntent ?? confirmation.paymentIntent ?? null
+                  resolvedIntent
                 );
                 setPhase("completed");
                 onSuccess(receipt);
@@ -368,6 +557,7 @@ export function BookingSheet({
   }, [
     currency,
     handleFinalize,
+    applyPaymentContact,
     itinerary.flight.airline,
     itinerary.id,
     itinerary.lodging.name,
@@ -468,6 +658,150 @@ export function BookingSheet({
             </p>
           </div>
         </div>
+
+        <section className="mt-6 space-y-4 rounded-2xl border border-slate-800/40 bg-slate-900/50 p-4 text-sm text-slate-300">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Lead traveller contact
+              </h3>
+              <p className="mt-1 text-[11px] text-slate-500">
+                Required for Amadeus ticketing. Sandbox accepts placeholder
+                documents if you don&apos;t have real details yet.
+              </p>
+            </div>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="space-y-1">
+              <span className="text-xs uppercase tracking-wide text-slate-500">
+                First name
+              </span>
+              <input
+                type="text"
+                value={travelerFirstName}
+                onChange={(event) => setTravelerFirstName(event.target.value)}
+                placeholder="Alex"
+                className="w-full rounded-xl border border-slate-800/60 bg-slate-950/60 px-3 py-2 text-slate-100 outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/40"
+              />
+            </label>
+            <label className="space-y-1">
+              <span className="text-xs uppercase tracking-wide text-slate-500">
+                Last name
+              </span>
+              <input
+                type="text"
+                value={travelerLastName}
+                onChange={(event) => setTravelerLastName(event.target.value)}
+                placeholder="Walker"
+                className="w-full rounded-xl border border-slate-800/60 bg-slate-950/60 px-3 py-2 text-slate-100 outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/40"
+              />
+            </label>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="space-y-1">
+              <span className="text-xs uppercase tracking-wide text-slate-500">
+                Date of birth
+              </span>
+              <input
+                type="date"
+                value={travelerDateOfBirth}
+                onChange={(event) => setTravelerDateOfBirth(event.target.value)}
+                className="w-full rounded-xl border border-slate-800/60 bg-slate-950/60 px-3 py-2 text-slate-100 outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/40"
+              />
+            </label>
+            <label className="space-y-1">
+              <span className="text-xs uppercase tracking-wide text-slate-500">
+                Nationality (ISO code)
+              </span>
+              <input
+                type="text"
+                inputMode="text"
+                maxLength={2}
+                value={travelerNationality}
+                onChange={(event) =>
+                  setTravelerNationality(event.target.value.toUpperCase())
+                }
+                className="w-full rounded-xl border border-slate-800/60 bg-slate-950/60 px-3 py-2 text-slate-100 uppercase outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/40"
+              />
+            </label>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="space-y-1">
+              <span className="text-xs uppercase tracking-wide text-slate-500">
+                Passport number
+              </span>
+              <input
+                type="text"
+                value={travelerPassportNumber}
+                onChange={(event) =>
+                  setTravelerPassportNumber(event.target.value.toUpperCase())
+                }
+                placeholder="PA1234567"
+                className="w-full rounded-xl border border-slate-800/60 bg-slate-950/60 px-3 py-2 text-slate-100 uppercase outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/40"
+              />
+            </label>
+            <label className="space-y-1">
+              <span className="text-xs uppercase tracking-wide text-slate-500">
+                Passport expiry
+              </span>
+              <input
+                type="date"
+                value={travelerPassportExpiry}
+                onChange={(event) =>
+                  setTravelerPassportExpiry(event.target.value)
+                }
+                className="w-full rounded-xl border border-slate-800/60 bg-slate-950/60 px-3 py-2 text-slate-100 outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/40"
+              />
+            </label>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="space-y-1">
+              <span className="text-xs uppercase tracking-wide text-slate-500">
+                Passport issuance country (ISO)
+              </span>
+              <input
+                type="text"
+                maxLength={2}
+                value={travelerPassportIssuanceCountry}
+                onChange={(event) =>
+                  setTravelerPassportIssuanceCountry(
+                    event.target.value.toUpperCase()
+                  )
+                }
+                className="w-full rounded-xl border border-slate-800/60 bg-slate-950/60 px-3 py-2 text-slate-100 uppercase outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/40"
+              />
+            </label>
+            <label className="space-y-1">
+              <span className="text-xs uppercase tracking-wide text-slate-500">
+                Contact email
+              </span>
+              <input
+                type="email"
+                value={customerEmail}
+                onChange={(event) => setCustomerEmail(event.target.value)}
+                placeholder="alex@example.com"
+                className="w-full rounded-xl border border-slate-800/60 bg-slate-950/60 px-3 py-2 text-slate-100 outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/40"
+              />
+            </label>
+          </div>
+
+          <label className="space-y-1">
+            <span className="text-xs uppercase tracking-wide text-slate-500">
+              Contact phone (E.164)
+            </span>
+            <input
+              type="tel"
+              value={customerPhone}
+              onChange={(event) => setCustomerPhone(event.target.value)}
+              placeholder="+61412345678"
+              className="w-full rounded-xl border border-slate-800/60 bg-slate-950/60 px-3 py-2 text-slate-100 outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/40"
+            />
+          </label>
+        </section>
 
         <div className="mt-6 space-y-3">
           {phase === "loading" && (

@@ -1,4 +1,5 @@
 import type {
+  BookingTraveler,
   FlightLeg,
   FlightOffer,
   LodgingOffer,
@@ -95,6 +96,39 @@ interface AmadeusHotelOffersResponse {
       self?: string;
     }>;
   }>;
+}
+
+interface AmadeusFlightPricingResponse {
+  data?: {
+    type?: string;
+    flightOffers?: Array<
+      Record<string, unknown> & {
+        price?: { total?: string; currency?: string };
+      }
+    >;
+  };
+}
+
+interface AmadeusFlightOrderResponse {
+  data?: {
+    id?: string;
+    type?: string;
+    flightOffers?: Array<Record<string, unknown>>;
+    travelers?: Array<Record<string, unknown>>;
+    associatedRecords?: Array<{ reference?: string; creationDate?: string }>;
+  };
+  meta?: Record<string, unknown>;
+}
+
+interface AmadeusHotelBookingResponse {
+  data?: {
+    id?: string;
+    providerConfirmationId?: string;
+    guests?: Array<Record<string, unknown>>;
+    payments?: Array<Record<string, unknown>>;
+    creationDate?: string;
+  };
+  meta?: Record<string, unknown>;
 }
 
 interface CachedToken {
@@ -273,6 +307,28 @@ async function amadeusGet<T>(
   return (await response.json()) as T;
 }
 
+async function amadeusPost<T>(path: string, body: unknown): Promise<T> {
+  const token = await getAccessToken();
+  const response = await fetch(`${AMADEUS_BASE_URL}${path}`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(
+      `Amadeus request failed (${response.status}): ${errorText}`
+    );
+  }
+
+  return (await response.json()) as T;
+}
+
 async function resolveCityCode(cityName: string): Promise<string> {
   const normalized = cityName.trim().toLowerCase();
   if (cityCodeCache.has(normalized)) {
@@ -371,6 +427,9 @@ function buildFlightOffer(
       currency: offer.price.currency,
     },
     bookingUrl: undefined,
+    amadeus: {
+      raw: offer,
+    },
   };
 }
 
@@ -555,6 +614,222 @@ export async function searchAmadeusHotels(
             result.hotel.address?.cityName || query.destinationCity
           } hotel`
         )}`,
+      amadeus: offer?.id
+        ? {
+            offerId: offer.id,
+            hotelId: result.hotel.self,
+            raw: offer,
+          }
+        : undefined,
     } satisfies LodgingOffer;
   });
+}
+
+function uppercase(value: string): string {
+  return value.toUpperCase();
+}
+
+const FALLBACK_TRAVELER: Required<BookingTraveler> = {
+  firstName: "Test",
+  lastName: "Passenger",
+  dateOfBirth: "1990-01-01",
+  email: "traveler@example.com",
+  phoneCountryCode: "61",
+  phoneNumber: "412345678",
+  nationality: "AU",
+  passportNumber: "X1234567",
+  passportExpiry: "2030-12-31",
+  passportIssuanceCountry: "AU",
+};
+
+function buildAmadeusTravelerPayload(travelers?: BookingTraveler[]) {
+  const source = travelers?.length ? travelers : [FALLBACK_TRAVELER];
+
+  const normalized = source.map((traveler, index) => {
+    const base = {
+      ...FALLBACK_TRAVELER,
+      ...traveler,
+    } as Required<BookingTraveler>;
+    return {
+      id: String(index + 1),
+      dateOfBirth: base.dateOfBirth,
+      gender: "UNSPECIFIED",
+      name: {
+        firstName: uppercase(base.firstName),
+        lastName: uppercase(base.lastName),
+      },
+      contact: {
+        emailAddress: base.email,
+        phones: [
+          {
+            deviceType: "MOBILE",
+            countryCallingCode: base.phoneCountryCode,
+            number: base.phoneNumber,
+          },
+        ],
+      },
+      documents: [
+        {
+          documentType: "PASSPORT",
+          number: base.passportNumber,
+          expiryDate: base.passportExpiry,
+          issuanceCountry: base.passportIssuanceCountry,
+          nationality: base.nationality,
+          holder: true,
+        },
+      ],
+    };
+  });
+
+  const primaryBase = {
+    ...FALLBACK_TRAVELER,
+    ...source[0],
+  } as Required<BookingTraveler>;
+
+  const bookingContact = {
+    addresseeName: {
+      firstName: uppercase(primaryBase.firstName),
+      lastName: uppercase(primaryBase.lastName),
+    },
+    companyName: "Travel-AI",
+    purpose: "STANDARD",
+    phones: [
+      {
+        deviceType: "MOBILE",
+        countryCallingCode: primaryBase.phoneCountryCode,
+        number: primaryBase.phoneNumber,
+      },
+    ],
+    emailAddress: primaryBase.email,
+    address: {
+      lines: ["123 Demo Street"],
+      postalCode: "2000",
+      cityName: "Sydney",
+      countryCode:
+        primaryBase.passportIssuanceCountry || primaryBase.nationality || "AU",
+    },
+  };
+
+  return {
+    travelers: normalized,
+    bookingContact,
+    primaryBase,
+  };
+}
+
+export async function priceAmadeusFlightOffer(
+  flightOffer: unknown
+): Promise<AmadeusFlightPricingResponse | null> {
+  if (!isAmadeusConfigured() || !flightOffer) {
+    return null;
+  }
+
+  return amadeusPost<AmadeusFlightPricingResponse>(
+    "/v2/shopping/flight-offers/pricing",
+    {
+      data: {
+        type: "flight-offers-pricing",
+        flightOffers: [flightOffer],
+      },
+    }
+  );
+}
+
+interface CreateFlightOrderOptions {
+  pricedFlightOffer: unknown;
+  travelers?: BookingTraveler[];
+}
+
+export async function createAmadeusFlightOrder({
+  pricedFlightOffer,
+  travelers,
+}: CreateFlightOrderOptions): Promise<AmadeusFlightOrderResponse | null> {
+  if (!isAmadeusConfigured() || !pricedFlightOffer) {
+    return null;
+  }
+
+  const { travelers: amadeusTravelers, bookingContact } =
+    buildAmadeusTravelerPayload(travelers);
+
+  return amadeusPost<AmadeusFlightOrderResponse>("/v1/booking/flight-orders", {
+    data: {
+      type: "flight-order",
+      flightOffers: [pricedFlightOffer],
+      travelers: amadeusTravelers,
+      remarks: {
+        general: [
+          {
+            subType: "GENERAL_MISCELLANEOUS",
+            text: "Travel-AI sandbox booking",
+          },
+        ],
+      },
+      ticketingAgreement: {
+        option: "DELAY_TO_CANCEL",
+        delay: "6D",
+      },
+      contacts: [bookingContact],
+    },
+  });
+}
+
+interface BookHotelOfferOptions {
+  offerId: string;
+  travelers?: BookingTraveler[];
+}
+
+export async function bookAmadeusHotelOffer({
+  offerId,
+  travelers,
+}: BookHotelOfferOptions): Promise<AmadeusHotelBookingResponse | null> {
+  if (!isAmadeusConfigured() || !offerId) {
+    return null;
+  }
+
+  const { travelers: amadeusTravelers, bookingContact } =
+    buildAmadeusTravelerPayload(travelers);
+  const primaryTraveler = amadeusTravelers[0];
+  const primaryPhone = bookingContact.phones[0];
+  const phoneE164 = primaryPhone
+    ? `+${primaryPhone.countryCallingCode}${primaryPhone.number}`
+    : "+61212345678";
+
+  return amadeusPost<AmadeusHotelBookingResponse>(
+    "/v1/booking/hotel-bookings",
+    {
+      data: {
+        offerId,
+        guests: [
+          {
+            id: 1,
+            name: {
+              firstName: primaryTraveler.name.firstName,
+              lastName: primaryTraveler.name.lastName,
+            },
+            contact: {
+              phone: phoneE164,
+              email: bookingContact.emailAddress,
+            },
+          },
+        ],
+        payments: [
+          {
+            id: 1,
+            method: "creditCard",
+            card: {
+              vendorCode: "VI",
+              cardNumber: "4111111111111111",
+              expiryDate: "2028-08",
+            },
+          },
+        ],
+        roomAssociations: [
+          {
+            guestId: 1,
+            roomId: 1,
+          },
+        ],
+      },
+    }
+  );
 }

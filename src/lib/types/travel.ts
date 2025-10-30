@@ -58,6 +58,9 @@ export interface FlightOffer {
   };
   emissionsKg?: number;
   bookingUrl?: string;
+  amadeus?: {
+    raw?: unknown;
+  };
 }
 
 export interface LodgingOffer {
@@ -80,6 +83,11 @@ export interface LodgingOffer {
   amenities?: string[];
   imageUrl?: string;
   bookingUrl?: string;
+  amadeus?: {
+    offerId: string;
+    hotelId?: string;
+    raw?: unknown;
+  };
 }
 
 export interface ItineraryPackage {
@@ -133,6 +141,19 @@ export interface BookingStaySummary {
   checkOut?: string;
 }
 
+export interface BookingTraveler {
+  firstName: string;
+  lastName: string;
+  dateOfBirth?: string;
+  email?: string;
+  phoneCountryCode?: string;
+  phoneNumber?: string;
+  nationality?: string;
+  passportNumber?: string;
+  passportExpiry?: string;
+  passportIssuanceCountry?: string;
+}
+
 export interface BookingConfirmationPayload {
   itineraryId: string;
   itineraryHeadline: string;
@@ -143,8 +164,16 @@ export interface BookingConfirmationPayload {
   paymentIntentId?: string;
   customerEmail?: string;
   customerName?: string;
+  customerPhone?: string;
   flight?: BookingFlightSummary;
   stay?: BookingStaySummary;
+  travelers?: BookingTraveler[];
+  amadeusFlightOffer?: unknown;
+  amadeusHotelOffer?: {
+    offerId: string;
+    hotelId?: string;
+    raw?: unknown;
+  };
 }
 
 export interface BookingResponse {
@@ -159,7 +188,15 @@ export interface BookingResponse {
   paymentIntentId?: string;
   customerEmail?: string;
   customerName?: string;
+  customerPhone?: string;
   flight?: BookingFlightSummary;
   stay?: BookingStaySummary;
+  travelers?: BookingTraveler[];
   bookingTimestamp: string;
+  amadeusFlightOrderId?: string;
+  amadeusHotelReservationId?: string;
+  amadeusFlightOrder?: unknown;
+  amadeusHotelBooking?: unknown;
+  amadeusFlightOrderError?: string;
+  amadeusHotelBookingError?: string;
 }

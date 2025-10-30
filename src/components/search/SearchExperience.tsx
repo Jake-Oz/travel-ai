@@ -54,7 +54,7 @@ export function SearchExperience() {
     const timer = setTimeout(() => {
       setIsReceiptVisible(false);
       setReceipt(null);
-    }, 8000);
+    }, 30000);
 
     return () => clearTimeout(timer);
   }, [isReceiptVisible]);
@@ -118,6 +118,12 @@ export function SearchExperience() {
                     <h3 className="text-lg font-semibold text-emerald-100">
                       {receipt.itineraryHeadline}
                     </h3>
+                    {receipt.status === "pending" && (
+                      <p className="text-xs text-amber-200/90">
+                        Awaiting Amadeus confirmation. We&apos;ll email you once
+                        the booking finalises.
+                      </p>
+                    )}
                     {receipt.confirmationNumber && (
                       <p className="text-sm text-emerald-200">
                         Reference {receipt.confirmationNumber}
@@ -218,6 +224,26 @@ export function SearchExperience() {
               {receipt.paymentIntentId && (
                 <p className="mt-2 text-[11px] text-emerald-200/70">
                   Stripe payment intent {receipt.paymentIntentId}
+                </p>
+              )}
+              {receipt.amadeusFlightOrderError && (
+                <p className="mt-2 text-[11px] text-amber-200/80">
+                  Flight booking pending: {receipt.amadeusFlightOrderError}
+                </p>
+              )}
+              {receipt.amadeusFlightOrderId && (
+                <p className="mt-1 text-[11px] text-emerald-200/70">
+                  Amadeus flight order {receipt.amadeusFlightOrderId}
+                </p>
+              )}
+              {receipt.amadeusHotelBookingError && (
+                <p className="mt-2 text-[11px] text-amber-200/80">
+                  Hotel booking pending: {receipt.amadeusHotelBookingError}
+                </p>
+              )}
+              {receipt.amadeusHotelReservationId && (
+                <p className="mt-1 text-[11px] text-emerald-200/70">
+                  Amadeus hotel reservation {receipt.amadeusHotelReservationId}
                 </p>
               )}
             </div>
