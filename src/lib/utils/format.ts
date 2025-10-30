@@ -17,7 +17,11 @@ const zeroDecimalCurrencies = new Set([
   "XPF",
 ]);
 
-export function formatCurrency(amount: number, currency: string, locale = "en-AU"): string {
+export function formatCurrency(
+  amount: number,
+  currency: string,
+  locale = "en-AU"
+): string {
   const normalizedCurrency = currency.toUpperCase();
   const isZeroDecimal = zeroDecimalCurrencies.has(normalizedCurrency);
 

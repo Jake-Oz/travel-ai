@@ -12,11 +12,17 @@ interface ItineraryListProps {
   onSelect?: (itinerary: ItineraryPackage) => void;
 }
 
-export function ItineraryList({ itineraries, phase, error, onSelect }: ItineraryListProps) {
+export function ItineraryList({
+  itineraries,
+  phase,
+  error,
+  onSelect,
+}: ItineraryListProps) {
   if (phase === "idle") {
     return (
       <div className="rounded-3xl border border-dashed border-slate-700/60 bg-slate-950/40 p-10 text-center text-sm text-slate-400">
-        Ask Travel-AI for a trip and the coordinated agents will present curated itineraries here.
+        Ask Travel-AI for a trip and the coordinated agents will present curated
+        itineraries here.
       </div>
     );
   }

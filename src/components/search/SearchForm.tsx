@@ -16,7 +16,7 @@ export function SearchForm() {
   const submit = useSearchStore((state) => state.submit);
   const isSubmitting = useSearchStore((state) => state.isSubmitting);
   const [query, setQuery] = useState(
-    "Find me a business class flight to Tokyo from Sydney next month and a 4-star hotel in Shinjuku for 5 nights",
+    "Find me a business class flight to Tokyo from Sydney next month and a 4-star hotel in Shinjuku for 5 nights"
   );
   const [travelClass, setTravelClass] = useState<TravelClass>("business");
   const [passengers, setPassengers] = useState(1);
@@ -96,7 +96,9 @@ export function SearchForm() {
               type="number"
               min={1}
               value={passengers}
-              onChange={(event) => setPassengers(Number.parseInt(event.target.value || "1", 10))}
+              onChange={(event) =>
+                setPassengers(Number.parseInt(event.target.value || "1", 10))
+              }
               className="w-full rounded-xl border border-slate-700/60 bg-slate-950/60 p-3 text-center text-slate-100 outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/40"
             />
           </div>
@@ -108,7 +110,9 @@ export function SearchForm() {
               type="number"
               min={1}
               value={nights}
-              onChange={(event) => setNights(Number.parseInt(event.target.value || "1", 10))}
+              onChange={(event) =>
+                setNights(Number.parseInt(event.target.value || "1", 10))
+              }
               className="w-full rounded-xl border border-slate-700/60 bg-slate-950/60 p-3 text-center text-slate-100 outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/40"
             />
           </div>
@@ -165,7 +169,9 @@ export function SearchForm() {
               type="text"
               maxLength={3}
               value={currency}
-              onChange={(event) => setCurrency(event.target.value.toUpperCase())}
+              onChange={(event) =>
+                setCurrency(event.target.value.toUpperCase())
+              }
               className="w-full rounded-xl border border-slate-700/60 bg-slate-950/60 p-3 text-center text-slate-100 uppercase outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/40"
             />
           </div>
@@ -174,7 +180,8 @@ export function SearchForm() {
 
       <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-sm text-slate-400">
-          Travel-AI uses orchestrated agents to search flights, hotels, and pricing in real time.
+          Travel-AI uses orchestrated agents to search flights, hotels, and
+          pricing in real time.
         </p>
         <button
           type="submit"

@@ -5,13 +5,11 @@ import type { NaturalLanguageSearchRequest } from "@/lib/types/travel";
 
 export async function POST(request: Request) {
   try {
-    const payload = (await request.json()) as Partial<NaturalLanguageSearchRequest>;
+    const payload =
+      (await request.json()) as Partial<NaturalLanguageSearchRequest>;
 
     if (!payload?.query || typeof payload.query !== "string") {
-      return NextResponse.json(
-        { error: "Query is required" },
-        { status: 400 },
-      );
+      return NextResponse.json({ error: "Query is required" }, { status: 400 });
     }
 
     const data = await runTravelSearch({
@@ -24,7 +22,7 @@ export async function POST(request: Request) {
     console.error("Search API error", error);
     return NextResponse.json(
       { error: "Failed to execute search" },
-      { status: 500 },
+      { status: 500 }
     );
   }
 }

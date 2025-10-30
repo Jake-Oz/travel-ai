@@ -2,8 +2,12 @@ import { NextResponse } from "next/server";
 import Stripe from "stripe";
 
 const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
-const defaultCurrency = (process.env.PAYMENTS_DEFAULT_CURRENCY ?? "AUD").toUpperCase();
-const defaultCountry = (process.env.PAYMENTS_DEFAULT_COUNTRY ?? "AU").toUpperCase();
+const defaultCurrency = (
+  process.env.PAYMENTS_DEFAULT_CURRENCY ?? "AUD"
+).toUpperCase();
+const defaultCountry = (
+  process.env.PAYMENTS_DEFAULT_COUNTRY ?? "AU"
+).toUpperCase();
 
 const zeroDecimalCurrencies = new Set([
   "BIF",
@@ -66,7 +70,7 @@ export async function POST(request: Request) {
   if (!stripeSecretKey) {
     return NextResponse.json(
       { error: "Stripe is not configured" },
-      { status: 503 },
+      { status: 503 }
     );
   }
 
@@ -83,7 +87,7 @@ export async function POST(request: Request) {
     if (!body?.itineraryId || !body.amount) {
       return NextResponse.json(
         { error: "Missing itineraryId or amount" },
-        { status: 400 },
+        { status: 400 }
       );
     }
 
@@ -93,7 +97,8 @@ export async function POST(request: Request) {
     const paymentIntent = await stripe.paymentIntents.create({
       amount,
       currency: normalizedCurrency.toLowerCase(),
-      description: body.description || `Travel-AI itinerary ${body.itineraryId}`,
+      description:
+        body.description || `Travel-AI itinerary ${body.itineraryId}`,
       automatic_payment_methods: { enabled: true },
       metadata: {
         itineraryId: body.itineraryId,
@@ -112,7 +117,7 @@ export async function POST(request: Request) {
     console.error("Stripe intent creation failed", error);
     return NextResponse.json(
       { error: "Unable to create payment intent" },
-      { status: 500 },
+      { status: 500 }
     );
   }
 }

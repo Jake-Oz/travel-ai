@@ -1,8 +1,4 @@
-export type TravelClass =
-  | "economy"
-  | "premium_economy"
-  | "business"
-  | "first";
+export type TravelClass = "economy" | "premium_economy" | "business" | "first";
 
 export interface SearchPreferences {
   travelClass?: TravelClass;

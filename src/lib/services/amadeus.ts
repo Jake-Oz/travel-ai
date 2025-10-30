@@ -39,7 +39,11 @@ interface AmadeusFlightOffersResponse {
     travelerPricings?: Array<{
       fareDetailsBySegment?: Array<{
         cabin?: string;
-        includedCheckedBags?: { weight?: number; weightUnit?: string; quantity?: number };
+        includedCheckedBags?: {
+          weight?: number;
+          weightUnit?: string;
+          quantity?: number;
+        };
       }>;
     }>;
   }>;
@@ -81,7 +85,11 @@ interface AmadeusHotelOffersResponse {
       id: string;
       checkInDate?: string;
       checkOutDate?: string;
-      price: { currency: string; total: string; taxes?: Array<{ amount: string }> };
+      price: {
+        currency: string;
+        total: string;
+        taxes?: Array<{ amount: string }>;
+      };
       room?: { type?: string; typeEstimated?: { category?: string } };
       boardType?: string;
       self?: string;
@@ -146,7 +154,7 @@ function addDays(base: Date, days: number): Date {
 
 function ensureFutureDate(
   dateStr: string | null | undefined,
-  fallbackOffsetDays: number,
+  fallbackOffsetDays: number
 ): string {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -213,10 +221,11 @@ async function getAccessToken(): Promise<string> {
     body,
   });
 
-  const payload = (await response.json()) as Partial<AmadeusAccessTokenResponse> & {
-    error?: string;
-    error_description?: string;
-  };
+  const payload =
+    (await response.json()) as Partial<AmadeusAccessTokenResponse> & {
+      error?: string;
+      error_description?: string;
+    };
 
   if (!response.ok || !payload.access_token) {
     const reason =
@@ -234,13 +243,16 @@ type AmadeusQueryParam = string | number | boolean | undefined | null;
 
 async function amadeusGet<T>(
   path: string,
-  params: Record<string, AmadeusQueryParam>,
+  params: Record<string, AmadeusQueryParam>
 ): Promise<T> {
   const token = await getAccessToken();
   const url = new URL(`${AMADEUS_BASE_URL}${path}`);
   Object.entries(params).forEach(([key, value]) => {
     if (value !== undefined && value !== null && value !== "") {
-      url.searchParams.set(key, typeof value === "boolean" ? String(value) : String(value));
+      url.searchParams.set(
+        key,
+        typeof value === "boolean" ? String(value) : String(value)
+      );
     }
   });
 
@@ -253,7 +265,9 @@ async function amadeusGet<T>(
 
   if (!response.ok) {
     const errorText = await response.text();
-    throw new Error(`Amadeus request failed (${response.status}): ${errorText}`);
+    throw new Error(
+      `Amadeus request failed (${response.status}): ${errorText}`
+    );
   }
 
   return (await response.json()) as T;
@@ -274,14 +288,16 @@ async function resolveCityCode(cityName: string): Promise<string> {
   const response = await amadeusGet<AmadeusCitySearchResponse>(
     "/v1/reference-data/locations",
     {
-  keyword: cityName.trim().toUpperCase().slice(0, 10),
+      keyword: cityName.trim().toUpperCase().slice(0, 10),
       subType: "CITY,AIRPORT",
       "page[limit]": 5,
       view: "LIGHT",
-    },
+    }
   );
 
-  const match = response.data?.find((entry) => entry.subType === "CITY" && entry.iataCode);
+  const match = response.data?.find(
+    (entry) => entry.subType === "CITY" && entry.iataCode
+  );
   if (match?.iataCode) {
     cityCodeCache.set(normalized, match.iataCode);
     return match.iataCode;
@@ -316,7 +332,7 @@ function mapTravelClass(travelClass: TravelClass): string {
 function buildFlightOffer(
   offer: NonNullable<AmadeusFlightOffersResponse["data"]>[number],
   dictionaries: AmadeusFlightOffersResponse["dictionaries"],
-  query: StructuredTravelQuery,
+  query: StructuredTravelQuery
 ): FlightOffer {
   const firstSegment = offer.itineraries[0]?.segments[0];
   const legs: FlightLeg[] = offer.itineraries.flatMap((itinerary) =>
@@ -325,14 +341,17 @@ function buildFlightOffer(
       arrivalAirport: segment.arrival.iataCode,
       departureTime: segment.departure.at,
       arrivalTime: segment.arrival.at,
-    })),
+    }))
   );
 
   const airlineCode =
-    firstSegment?.marketingCarrierCode || firstSegment?.carrierCode || "Unknown";
+    firstSegment?.marketingCarrierCode ||
+    firstSegment?.carrierCode ||
+    "Unknown";
   const airlineName = dictionaries?.carriers?.[airlineCode] || airlineCode;
 
-  const baggage = offer.travelerPricings?.[0]?.fareDetailsBySegment?.[0]?.includedCheckedBags;
+  const baggage =
+    offer.travelerPricings?.[0]?.fareDetailsBySegment?.[0]?.includedCheckedBags;
 
   const itineraryDuration = offer.itineraries
     .map((itinerary) => minutesFromIsoDuration(itinerary.duration))
@@ -357,7 +376,7 @@ function buildFlightOffer(
 
 export async function searchAmadeusFlights(
   query: StructuredTravelQuery,
-  maxResults = 4,
+  maxResults = 4
 ): Promise<FlightOffer[]> {
   const originCode = await resolveCityCode(query.originCity);
   const destinationCode = await resolveCityCode(query.destinationCity);
@@ -368,7 +387,7 @@ export async function searchAmadeusFlights(
     safeReturn = ensureFutureDate(query.returnDate, 37);
     if (safeReturn <= safeDeparture) {
       safeReturn = formatDateOnly(
-        addDays(new Date(safeDeparture), Math.max(query.nights ?? 5, 1)),
+        addDays(new Date(safeDeparture), Math.max(query.nights ?? 5, 1))
       );
     }
   }
@@ -384,7 +403,7 @@ export async function searchAmadeusFlights(
       returnDate: safeReturn,
       currencyCode: query.budget?.currency,
       max: maxResults,
-    },
+    }
   );
 
   const offers = response.data ?? [];
@@ -392,9 +411,9 @@ export async function searchAmadeusFlights(
     return [];
   }
 
-  return offers.slice(0, maxResults).map((offer) =>
-    buildFlightOffer(offer, response.dictionaries, query),
-  );
+  return offers
+    .slice(0, maxResults)
+    .map((offer) => buildFlightOffer(offer, response.dictionaries, query));
 }
 
 async function fetchHotelIds(cityCode: string): Promise<string[]> {
@@ -410,15 +429,20 @@ async function fetchHotelIds(cityCode: string): Promise<string[]> {
       {
         cityCode: sanitized,
         hotelSource: "ALL",
-      },
+      }
     );
 
-    const liveIds = response.data?.map((hotel) => hotel.hotelId).filter(Boolean) ?? [];
+    const liveIds =
+      response.data?.map((hotel) => hotel.hotelId).filter(Boolean) ?? [];
     if (liveIds.length) {
       return liveIds.slice(0, 10);
     }
   } catch (error) {
-    console.warn("Amadeus hotel id lookup failed", { cityCode, sanitized, error });
+    console.warn("Amadeus hotel id lookup failed", {
+      cityCode,
+      sanitized,
+      error,
+    });
   }
 
   return STATIC_AMADEUS_HOTEL_IDS[sanitized] ?? [];
@@ -426,7 +450,7 @@ async function fetchHotelIds(cityCode: string): Promise<string[]> {
 
 export async function searchAmadeusHotels(
   query: StructuredTravelQuery,
-  maxResults = 4,
+  maxResults = 4
 ): Promise<LodgingOffer[]> {
   const destinationCode = await resolveCityCode(query.destinationCity);
   const cityCode = destinationCode.slice(0, 3).toUpperCase();
@@ -434,10 +458,15 @@ export async function searchAmadeusHotels(
   const checkIn = ensureFutureDate(query.departureDate, 30);
   const preliminaryCheckOut = query.returnDate
     ? ensureFutureDate(query.returnDate, 37)
-    : formatDateOnly(addDays(new Date(checkIn), Math.max(query.nights ?? 5, 1)));
-  const checkOut = preliminaryCheckOut <= checkIn
-    ? formatDateOnly(addDays(new Date(checkIn), Math.max(query.nights ?? 5, 1)))
-    : preliminaryCheckOut;
+    : formatDateOnly(
+        addDays(new Date(checkIn), Math.max(query.nights ?? 5, 1))
+      );
+  const checkOut =
+    preliminaryCheckOut <= checkIn
+      ? formatDateOnly(
+          addDays(new Date(checkIn), Math.max(query.nights ?? 5, 1))
+        )
+      : preliminaryCheckOut;
 
   const hotelIds = await fetchHotelIds(cityCode);
   if (!hotelIds.length) {
@@ -457,7 +486,7 @@ export async function searchAmadeusHotels(
         roomQuantity: 1,
         currency: query.budget?.currency,
         bestRateOnly: "true",
-      },
+      }
     );
     hotelsData = response.data ?? [];
   } catch (error) {
@@ -477,22 +506,26 @@ export async function searchAmadeusHotels(
       ? Number.parseFloat(offer.price.total)
       : undefined;
     const currency = offer?.price?.currency || query.budget?.currency || "USD";
-    const stayNights = query.nights ??
+    const stayNights =
+      query.nights ??
       Math.max(
         Math.ceil(
           (new Date(checkOut).getTime() - new Date(checkIn).getTime()) /
-            (24 * 60 * 60 * 1000),
+            (24 * 60 * 60 * 1000)
         ),
-        1,
+        1
       );
-    const nightlyAmount = totalAmount && stayNights
-      ? totalAmount / stayNights
-      : totalAmount ?? query.budget?.amount ?? 0;
+    const nightlyAmount =
+      totalAmount && stayNights
+        ? totalAmount / stayNights
+        : totalAmount ?? query.budget?.amount ?? 0;
 
     return {
       id: offer?.id || `hotel-${index}`,
       name: result.hotel.name,
-      stars: result.hotel.rating ? Number.parseFloat(result.hotel.rating) : undefined,
+      stars: result.hotel.rating
+        ? Number.parseFloat(result.hotel.rating)
+        : undefined,
       location: result.hotel.address?.cityName || query.destinationCity,
       addressLine: result.hotel.address?.lines?.[0],
       checkIn: offer?.checkInDate,
@@ -502,7 +535,8 @@ export async function searchAmadeusHotels(
         currency,
       },
       totalPrice: {
-        amount: totalAmount ?? query.budget?.amount ?? nightlyAmount * stayNights,
+        amount:
+          totalAmount ?? query.budget?.amount ?? nightlyAmount * stayNights,
         currency,
       },
       amenities: [offer?.boardType, offer?.room?.typeEstimated?.category]
@@ -512,7 +546,11 @@ export async function searchAmadeusHotels(
         offer?.self ||
         result.hotel.contact?.uri ||
         result.hotel.self ||
-        `https://www.google.com/search?q=${encodeURIComponent(`${result.hotel.name} ${result.hotel.address?.cityName || query.destinationCity} hotel`)}`,
+        `https://www.google.com/search?q=${encodeURIComponent(
+          `${result.hotel.name} ${
+            result.hotel.address?.cityName || query.destinationCity
+          } hotel`
+        )}`,
     } satisfies LodgingOffer;
   });
 }

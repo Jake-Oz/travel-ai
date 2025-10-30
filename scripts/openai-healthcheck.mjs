@@ -7,7 +7,9 @@ config();
 async function main() {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
-    console.error("OPENAI_API_KEY is not set. Add it to .env.local before running the health check.");
+    console.error(
+      "OPENAI_API_KEY is not set. Add it to .env.local before running the health check."
+    );
     process.exitCode = 1;
     return;
   }

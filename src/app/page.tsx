@@ -16,7 +16,9 @@ export default function Home() {
             Plan and book curated journeys with conversational AI
           </h1>
           <p className="max-w-2xl text-base text-slate-300">
-            Travel-AI understands complex requests, coordinates flight and accommodation agents, and prepares bookable itineraries with Apple Pay ready checkout.
+            Travel-AI understands complex requests, coordinates flight and
+            accommodation agents, and prepares bookable itineraries with Apple
+            Pay ready checkout.
           </p>
         </section>
         <SearchExperience />

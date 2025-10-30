@@ -12,9 +12,7 @@ const travelClassValues: TravelClass[] = [
 export const structuredTravelQuerySchema = z.object({
   originCity: z.string().min(2, "Origin city is required"),
   destinationCity: z.string().min(2, "Destination city is required"),
-  departureDate: z
-    .string()
-    .regex(/\d{4}-\d{2}-\d{2}/, "Expected YYYY-MM-DD"),
+  departureDate: z.string().regex(/\d{4}-\d{2}-\d{2}/, "Expected YYYY-MM-DD"),
   returnDate: z
     .string()
     .regex(/\d{4}-\d{2}-\d{2}/, "Expected YYYY-MM-DD")
@@ -45,7 +43,7 @@ export type StructuredTravelQueryShape = z.infer<
 >;
 
 export function assertStructuredTravelQuery(
-  payload: unknown,
+  payload: unknown
 ): StructuredTravelQuery {
   return structuredTravelQuerySchema.parse(payload);
 }

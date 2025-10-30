@@ -60,7 +60,9 @@ export function AgentTimeline({ trace, phase }: AgentTimelineProps) {
         {orderedTrace.map((item) => (
           <li key={item.agent} className="flex items-center gap-3">
             <span
-              className={`inline-flex h-9 min-w-[9rem] items-center justify-between rounded-full px-3 text-xs font-semibold uppercase tracking-wide ${statusColor(item.status)}`}
+              className={`inline-flex h-9 min-w-[9rem] items-center justify-between rounded-full px-3 text-xs font-semibold uppercase tracking-wide ${statusColor(
+                item.status
+              )}`}
             >
               {item.agent}
               <span className="text-[10px] text-slate-950/70">

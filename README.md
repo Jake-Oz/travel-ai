@@ -19,18 +19,18 @@ Travel-AI is a conversation-driven travel planning experience. Users describe th
 
 ### Environment Variables
 
-| Name | Required | Description |
-| --- | --- | --- |
-| `OPENAI_API_KEY` | Optional | Enables live structuring of natural language requests. Without it, the search coordinator uses mocked data. |
-| `OPENAI_MODEL` | Optional | Defaults to `gpt-4o-mini`. |
-| `AMADEUS_CLIENT_ID` | Optional | Required to fetch real flight and hotel data from the Amadeus test environment. |
-| `AMADEUS_CLIENT_SECRET` | Optional | Companion secret for the Amadeus client. |
-| `AMADEUS_BASE_URL` | Optional | Defaults to the Amadeus test API; override for production. |
-| `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` | Optional | Loads Stripe Elements for Apple Pay on the client. |
-| `NEXT_PUBLIC_STRIPE_MODE` | Optional | Defaults to `test`; controls the on-screen messaging for Stripe’s Apple Pay guidance. |
-| `STRIPE_SECRET_KEY` | Optional | Enables server-side payment intent creation. |
-| `PAYMENTS_DEFAULT_COUNTRY` | Optional | Fallback ISO country for Apple Pay merchant sessions (defaults to `AU`). |
-| `PAYMENTS_DEFAULT_CURRENCY` | Optional | Fallback currency code used when itineraries omit pricing (defaults to `AUD`). |
+| Name                                 | Required | Description                                                                                                 |
+| ------------------------------------ | -------- | ----------------------------------------------------------------------------------------------------------- |
+| `OPENAI_API_KEY`                     | Optional | Enables live structuring of natural language requests. Without it, the search coordinator uses mocked data. |
+| `OPENAI_MODEL`                       | Optional | Defaults to `gpt-4o-mini`.                                                                                  |
+| `AMADEUS_CLIENT_ID`                  | Optional | Required to fetch real flight and hotel data from the Amadeus test environment.                             |
+| `AMADEUS_CLIENT_SECRET`              | Optional | Companion secret for the Amadeus client.                                                                    |
+| `AMADEUS_BASE_URL`                   | Optional | Defaults to the Amadeus test API; override for production.                                                  |
+| `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` | Optional | Loads Stripe Elements for Apple Pay on the client.                                                          |
+| `NEXT_PUBLIC_STRIPE_MODE`            | Optional | Defaults to `test`; controls the on-screen messaging for Stripe’s Apple Pay guidance.                       |
+| `STRIPE_SECRET_KEY`                  | Optional | Enables server-side payment intent creation.                                                                |
+| `PAYMENTS_DEFAULT_COUNTRY`           | Optional | Fallback ISO country for Apple Pay merchant sessions (defaults to `AU`).                                    |
+| `PAYMENTS_DEFAULT_CURRENCY`          | Optional | Fallback currency code used when itineraries omit pricing (defaults to `AUD`).                              |
 
 ### Project Structure Highlights
 

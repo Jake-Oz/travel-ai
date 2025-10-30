@@ -9,7 +9,7 @@ export async function POST(request: Request) {
     if (!body?.itineraryId) {
       return NextResponse.json(
         { error: "Missing itineraryId" },
-        { status: 400 },
+        { status: 400 }
       );
     }
 
@@ -19,7 +19,7 @@ export async function POST(request: Request) {
     console.error("Booking API error", error);
     return NextResponse.json(
       { error: "Unable to finalize booking" },
-      { status: 500 },
+      { status: 500 }
     );
   }
 }

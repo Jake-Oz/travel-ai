@@ -9,9 +9,7 @@ import { assertStructuredTravelQuery } from "@/lib/schema/travelSchema";
 const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-4o-mini";
 const openaiApiKey = process.env.OPENAI_API_KEY;
 
-const openaiClient = openaiApiKey
-  ? new OpenAI({ apiKey: openaiApiKey })
-  : null;
+const openaiClient = openaiApiKey ? new OpenAI({ apiKey: openaiApiKey }) : null;
 
 function buildPrompt(request: NaturalLanguageSearchRequest): string {
   const today = new Date().toISOString().slice(0, 10);
@@ -41,12 +39,14 @@ function buildPrompt(request: NaturalLanguageSearchRequest): string {
 }
 
 function fallbackStructure(
-  request: NaturalLanguageSearchRequest,
+  request: NaturalLanguageSearchRequest
 ): StructuredTravelQuery {
   const today = new Date();
   const defaultDeparture = new Date(today.getTime() + 21 * 24 * 60 * 60 * 1000);
   const departureDate = defaultDeparture.toISOString().slice(0, 10);
-  const defaultReturn = new Date(defaultDeparture.getTime() + 5 * 24 * 60 * 60 * 1000);
+  const defaultReturn = new Date(
+    defaultDeparture.getTime() + 5 * 24 * 60 * 60 * 1000
+  );
 
   return {
     originCity: "Sydney",
@@ -62,11 +62,9 @@ function fallbackStructure(
     },
     budget:
       request.preferences?.budget ||
-      (
-        request.preferences?.travelClass === "first"
-          ? { amount: 7500, currency: "USD" }
-          : { amount: 5200, currency: "USD" }
-      ),
+      (request.preferences?.travelClass === "first"
+        ? { amount: 7500, currency: "USD" }
+        : { amount: 5200, currency: "USD" }),
     notes: request.query,
   };
 }
@@ -74,13 +72,16 @@ function fallbackStructure(
 function stripJsonEnvelope(text: string): string {
   const trimmed = text.trim();
   if (trimmed.startsWith("```")) {
-    return trimmed.replace(/^```[a-zA-Z]*\n?/, "").replace(/```$/, "").trim();
+    return trimmed
+      .replace(/^```[a-zA-Z]*\n?/, "")
+      .replace(/```$/, "")
+      .trim();
   }
   return trimmed;
 }
 
 export async function structureQueryWithOpenAI(
-  request: NaturalLanguageSearchRequest,
+  request: NaturalLanguageSearchRequest
 ): Promise<StructuredTravelQuery> {
   if (!openaiClient) {
     return fallbackStructure(request);

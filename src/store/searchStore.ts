@@ -18,7 +18,9 @@ interface SearchState {
   itineraries: ItineraryPackage[];
   trace: AgentTrace[];
   error?: string;
-  submit: (payload: NaturalLanguageSearchRequest) => Promise<SearchApiResponse | undefined>;
+  submit: (
+    payload: NaturalLanguageSearchRequest
+  ) => Promise<SearchApiResponse | undefined>;
   reset: () => void;
 }
 
@@ -30,7 +32,12 @@ export const useSearchStore = create<SearchState>((set) => ({
   trace: [],
   error: undefined,
   async submit(payload) {
-    set({ phase: "searching", isSubmitting: true, error: undefined, query: payload.query });
+    set({
+      phase: "searching",
+      isSubmitting: true,
+      error: undefined,
+      query: payload.query,
+    });
 
     try {
       const response = await fetch("/api/search", {

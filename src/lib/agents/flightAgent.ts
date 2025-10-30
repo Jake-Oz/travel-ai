@@ -7,7 +7,10 @@ import {
 const MOCK_DELAY_MS = 400;
 
 function minutesBetween(start: string, end: string): number {
-  return Math.max(0, (new Date(end).getTime() - new Date(start).getTime()) / 60000);
+  return Math.max(
+    0,
+    (new Date(end).getTime() - new Date(start).getTime()) / 60000
+  );
 }
 
 function buildIso(date: string, hour: number): string {
@@ -93,7 +96,7 @@ function buildMockFlights(query: StructuredTravelQuery): FlightOffer[] {
 }
 
 export async function flightAgentSearch(
-  query: StructuredTravelQuery,
+  query: StructuredTravelQuery
 ): Promise<FlightOffer[]> {
   if (isAmadeusConfigured()) {
     try {

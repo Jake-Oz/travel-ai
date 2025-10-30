@@ -53,7 +53,7 @@ function buildMockHotels(query: StructuredTravelQuery): LodgingOffer[] {
 }
 
 export async function hotelAgentSearch(
-  query: StructuredTravelQuery,
+  query: StructuredTravelQuery
 ): Promise<LodgingOffer[]> {
   if (isAmadeusConfigured()) {
     try {

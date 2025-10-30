@@ -1,7 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { PaymentRequestButtonElement, useStripe } from "@stripe/react-stripe-js";
+import {
+  PaymentRequestButtonElement,
+  useStripe,
+} from "@stripe/react-stripe-js";
 import type { PaymentRequest } from "@stripe/stripe-js";
 
 import type { BookingResponse, ItineraryPackage } from "@/lib/types/travel";
@@ -16,25 +19,34 @@ interface BookingSheetProps {
 
 type BookingPhase = "loading" | "ready" | "processing" | "completed" | "error";
 
-export function BookingSheet({ itinerary, onClose, onSuccess, onError }: BookingSheetProps) {
+export function BookingSheet({
+  itinerary,
+  onClose,
+  onSuccess,
+  onError,
+}: BookingSheetProps) {
   const stripe = useStripe();
   const [phase, setPhase] = useState<BookingPhase>("loading");
-  const [paymentRequest, setPaymentRequest] = useState<PaymentRequest | null>(null);
+  const [paymentRequest, setPaymentRequest] = useState<PaymentRequest | null>(
+    null
+  );
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [paymentError, setPaymentError] = useState<string | undefined>();
   const [intentAmount, setIntentAmount] = useState<number | undefined>();
   const [walletWarning, setWalletWarning] = useState<string | undefined>();
   const currency = (itinerary.totalPrice.currency ?? "AUD").toUpperCase();
-  const stripeMode = (process.env.NEXT_PUBLIC_STRIPE_MODE ?? "test").toLowerCase();
+  const stripeMode = (
+    process.env.NEXT_PUBLIC_STRIPE_MODE ?? "test"
+  ).toLowerCase();
   const isStripeTestMode = stripeMode === "test";
   const checkoutAmount = useMemo(
     () => (isStripeTestMode ? 1 : itinerary.totalPrice.amount),
-    [isStripeTestMode, itinerary.totalPrice.amount],
+    [isStripeTestMode, itinerary.totalPrice.amount]
   );
 
   const totalLabel = useMemo(
     () => itinerary.lodging.location || itinerary.headline,
-    [itinerary.headline, itinerary.lodging.location],
+    [itinerary.headline, itinerary.lodging.location]
   );
 
   const finalizeBooking = useCallback(async (): Promise<BookingResponse> => {
@@ -150,11 +162,14 @@ export function BookingSheet({ itinerary, onClose, onSuccess, onError }: Booking
                 {
                   payment_method: event.paymentMethod.id,
                 },
-                { handleActions: false },
+                { handleActions: false }
               );
 
               if (confirmation.error) {
-                console.error("Apple Pay confirmation error", confirmation.error);
+                console.error(
+                  "Apple Pay confirmation error",
+                  confirmation.error
+                );
                 throw confirmation.error;
               }
 
@@ -163,7 +178,10 @@ export function BookingSheet({ itinerary, onClose, onSuccess, onError }: Booking
 
               const finalResult = await stripe.confirmCardPayment(secret);
               if (finalResult.error) {
-                console.error("Apple Pay authentication error", finalResult.error);
+                console.error(
+                  "Apple Pay authentication error",
+                  finalResult.error
+                );
                 throw finalResult.error;
               }
 
@@ -173,7 +191,9 @@ export function BookingSheet({ itinerary, onClose, onSuccess, onError }: Booking
             } catch (error) {
               console.error("Apple Pay flow failed", error);
               const message =
-                error instanceof Error ? error.message : "Apple Pay authorization failed";
+                error instanceof Error
+                  ? error.message
+                  : "Apple Pay authorization failed";
               setPaymentError(message);
               setPhase("error");
               if (!isCompletedSuccessfully) {
@@ -188,14 +208,16 @@ export function BookingSheet({ itinerary, onClose, onSuccess, onError }: Booking
         } else {
           setPaymentRequest(null);
           setWalletWarning(
-            "Apple Pay is unavailable. Use Safari on a device with Apple Pay enabled and register your domain in Stripe’s Payment Method Domains settings.",
+            "Apple Pay is unavailable. Use Safari on a device with Apple Pay enabled and register your domain in Stripe’s Payment Method Domains settings."
           );
         }
 
         setPhase("ready");
       } catch (error) {
         const message =
-          error instanceof Error ? error.message : "Unable to initialize payment session";
+          error instanceof Error
+            ? error.message
+            : "Unable to initialize payment session";
         if (!isMounted) return;
         setPaymentError(message);
         setPhase("error");
@@ -210,7 +232,18 @@ export function BookingSheet({ itinerary, onClose, onSuccess, onError }: Booking
       setPaymentRequest(null);
       setClientSecret(null);
     };
-  }, [checkoutAmount, currency, finalizeBooking, itinerary.flight.airline, itinerary.id, itinerary.lodging.name, onError, onSuccess, stripe, totalLabel]);
+  }, [
+    checkoutAmount,
+    currency,
+    finalizeBooking,
+    itinerary.flight.airline,
+    itinerary.id,
+    itinerary.lodging.name,
+    onError,
+    onSuccess,
+    stripe,
+    totalLabel,
+  ]);
 
   async function handleSandboxCheckout() {
     try {
@@ -220,7 +253,9 @@ export function BookingSheet({ itinerary, onClose, onSuccess, onError }: Booking
       onSuccess(receipt);
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : "Unable to complete sandbox checkout";
+        error instanceof Error
+          ? error.message
+          : "Unable to complete sandbox checkout";
       setPaymentError(message);
       setPhase("error");
       onError(message);
@@ -232,7 +267,9 @@ export function BookingSheet({ itinerary, onClose, onSuccess, onError }: Booking
       <div className="w-full max-w-xl rounded-3xl border border-slate-800/60 bg-slate-950 p-6 shadow-2xl">
         <header className="flex items-start justify-between gap-4">
           <div>
-            <p className="text-xs uppercase tracking-wide text-slate-500">Confirm itinerary</p>
+            <p className="text-xs uppercase tracking-wide text-slate-500">
+              Confirm itinerary
+            </p>
             <h2 className="text-2xl font-semibold text-slate-100">
               {itinerary.headline}
             </h2>
@@ -255,9 +292,11 @@ export function BookingSheet({ itinerary, onClose, onSuccess, onError }: Booking
               {itinerary.flight.airline} {itinerary.flight.flightNumber}
             </p>
             <p className="text-xs text-slate-500">
-              {formatDateTime(itinerary.flight.legs[0]?.departureTime)} →
-              {" "}
-              {formatDateTime(itinerary.flight.legs[itinerary.flight.legs.length - 1]?.arrivalTime)}
+              {formatDateTime(itinerary.flight.legs[0]?.departureTime)} →{" "}
+              {formatDateTime(
+                itinerary.flight.legs[itinerary.flight.legs.length - 1]
+                  ?.arrivalTime
+              )}
             </p>
           </section>
 
@@ -265,21 +304,30 @@ export function BookingSheet({ itinerary, onClose, onSuccess, onError }: Booking
             <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
               Stay
             </h3>
-            <p className="mt-1 font-semibold text-slate-100">{itinerary.lodging.name}</p>
-            <p className="text-xs text-slate-500">{itinerary.lodging.location}</p>
+            <p className="mt-1 font-semibold text-slate-100">
+              {itinerary.lodging.name}
+            </p>
             <p className="text-xs text-slate-500">
-              Check-in {itinerary.lodging.checkIn} · Check-out {itinerary.lodging.checkOut}
+              {itinerary.lodging.location}
+            </p>
+            <p className="text-xs text-slate-500">
+              Check-in {itinerary.lodging.checkIn} · Check-out{" "}
+              {itinerary.lodging.checkOut}
             </p>
           </section>
 
           <div className="flex items-center justify-between rounded-2xl border border-emerald-400/40 bg-emerald-500/10 p-4">
             <div>
-              <p className="text-xs uppercase tracking-wide text-emerald-300">Total</p>
+              <p className="text-xs uppercase tracking-wide text-emerald-300">
+                Total
+              </p>
               <p className="text-lg font-semibold text-emerald-100">
                 {formatCurrency(checkoutAmount, currency)}
               </p>
             </div>
-            <p className="text-xs text-emerald-200">Apple Pay powered by Stripe</p>
+            <p className="text-xs text-emerald-200">
+              Apple Pay powered by Stripe
+            </p>
           </div>
         </div>
 
@@ -330,14 +378,16 @@ export function BookingSheet({ itinerary, onClose, onSuccess, onError }: Booking
           )}
 
           <p className="text-[11px] text-slate-500">
-            Apple Pay availability depends on your device and browser. Sandbox checkout will simulate
-            a confirmed reservation without charging a card.
+            Apple Pay availability depends on your device and browser. Sandbox
+            checkout will simulate a confirmed reservation without charging a
+            card.
           </p>
 
           {isStripeTestMode && (
             <p className="text-[11px] text-emerald-500">
-              Stripe test mode: Apple Pay authorisations succeed with your real wallet card but the
-              transaction is recorded as a test payment only, so no funds are captured.
+              Stripe test mode: Apple Pay authorisations succeed with your real
+              wallet card but the transaction is recorded as a test payment
+              only, so no funds are captured.
             </p>
           )}
         </div>

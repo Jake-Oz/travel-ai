@@ -15,7 +15,8 @@ export function SearchExperience() {
   const trace = useSearchStore((state) => state.trace);
   const error = useSearchStore((state) => state.error);
 
-  const [selectedItinerary, setSelectedItinerary] = useState<ItineraryPackage | null>(null);
+  const [selectedItinerary, setSelectedItinerary] =
+    useState<ItineraryPackage | null>(null);
   const [receipt, setReceipt] = useState<BookingResponse | null>(null);
   const [bookingError, setBookingError] = useState<string | null>(null);
 
@@ -53,7 +54,8 @@ export function SearchExperience() {
           />
           {receipt && (
             <div className="rounded-3xl border border-emerald-400/60 bg-emerald-500/10 p-6 text-sm text-emerald-100">
-              Booking confirmed. Confirmation number {receipt.confirmationNumber}.
+              Booking confirmed. Confirmation number{" "}
+              {receipt.confirmationNumber}.
             </div>
           )}
           {bookingError && (

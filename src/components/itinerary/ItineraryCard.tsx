@@ -1,5 +1,9 @@
 import type { ItineraryPackage } from "@/lib/types/travel";
-import { formatCurrency, formatDateTime, formatDuration } from "@/lib/utils/format";
+import {
+  formatCurrency,
+  formatDateTime,
+  formatDuration,
+} from "@/lib/utils/format";
 
 interface ItineraryCardProps {
   itinerary: ItineraryPackage;
@@ -41,7 +45,9 @@ export function ItineraryCard({ itinerary, onSelect }: ItineraryCardProps) {
                 {flight.airline} {flight.flightNumber}
               </span>
               <span className="rounded-full bg-slate-800/60 px-3 py-1 text-xs uppercase tracking-wide text-slate-200">
-                {flight.stops === 0 ? "Nonstop" : `${flight.stops} stop${flight.stops > 1 ? "s" : ""}`}
+                {flight.stops === 0
+                  ? "Nonstop"
+                  : `${flight.stops} stop${flight.stops > 1 ? "s" : ""}`}
               </span>
             </div>
             <div className="grid grid-cols-2 gap-3 text-xs text-slate-400">
@@ -61,7 +67,8 @@ export function ItineraryCard({ itinerary, onSelect }: ItineraryCardProps) {
               </div>
             </div>
             <p className="text-xs text-slate-400">
-              Duration {formatDuration(flight.durationMinutes)} · Cabin {flight.class.replace("_", " ")}
+              Duration {formatDuration(flight.durationMinutes)} · Cabin{" "}
+              {flight.class.replace("_", " ")}
             </p>
             <p className="text-xs text-slate-500">{flight.baggageAllowance}</p>
             {flight.legs.length > 1 && (
@@ -69,11 +76,17 @@ export function ItineraryCard({ itinerary, onSelect }: ItineraryCardProps) {
                 <p className="font-semibold text-slate-300">Route details</p>
                 <ol className="mt-2 space-y-2">
                   {flight.legs.map((leg, index) => (
-                    <li key={`${leg.departureAirport}-${leg.arrivalAirport}-${index}`} className="flex flex-col gap-0.5">
+                    <li
+                      key={`${leg.departureAirport}-${leg.arrivalAirport}-${index}`}
+                      className="flex flex-col gap-0.5"
+                    >
                       <span className="font-medium text-slate-200">
                         {leg.departureAirport} → {leg.arrivalAirport}
                       </span>
-                      <span>{formatDateTime(leg.departureTime)} to {formatDateTime(leg.arrivalTime)}</span>
+                      <span>
+                        {formatDateTime(leg.departureTime)} to{" "}
+                        {formatDateTime(leg.arrivalTime)}
+                      </span>
                     </li>
                   ))}
                 </ol>
@@ -88,7 +101,9 @@ export function ItineraryCard({ itinerary, onSelect }: ItineraryCardProps) {
           </h4>
           <div className="mt-3 flex flex-col gap-2 text-sm text-slate-300">
             <div className="flex items-center justify-between">
-              <span className="font-semibold text-slate-100">{lodging.name}</span>
+              <span className="font-semibold text-slate-100">
+                {lodging.name}
+              </span>
               <span className="rounded-full bg-amber-500/10 px-3 py-1 text-xs font-semibold text-amber-300">
                 {lodging.stars ? `${lodging.stars.toFixed(1)}*` : "Boutique"}
               </span>
@@ -96,15 +111,24 @@ export function ItineraryCard({ itinerary, onSelect }: ItineraryCardProps) {
             <p className="text-xs text-slate-400">{lodging.location}</p>
             <p className="text-xs text-slate-500">Check-in {lodging.checkIn}</p>
             {lodging.checkOut && (
-              <p className="text-xs text-slate-500">Check-out {lodging.checkOut}</p>
+              <p className="text-xs text-slate-500">
+                Check-out {lodging.checkOut}
+              </p>
             )}
             <div className="text-xs text-slate-400">
-              <span className="font-semibold text-slate-300">Nightly</span> {formatCurrency(lodging.nightlyRate.amount, lodging.nightlyRate.currency)}
+              <span className="font-semibold text-slate-300">Nightly</span>{" "}
+              {formatCurrency(
+                lodging.nightlyRate.amount,
+                lodging.nightlyRate.currency
+              )}
             </div>
             {lodging.amenities && (
               <div className="flex flex-wrap gap-2 text-[11px] uppercase tracking-wide text-slate-500">
                 {lodging.amenities.map((amenity) => (
-                  <span key={amenity} className="rounded-full bg-slate-800/40 px-2 py-1">
+                  <span
+                    key={amenity}
+                    className="rounded-full bg-slate-800/40 px-2 py-1"
+                  >
                     {amenity}
                   </span>
                 ))}
@@ -128,7 +152,10 @@ export function ItineraryCard({ itinerary, onSelect }: ItineraryCardProps) {
       <footer className="mt-6 flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap gap-2 text-[11px] uppercase tracking-wide text-slate-500">
           {itinerary.tags?.map((tag) => (
-            <span key={tag} className="rounded-full bg-slate-800/40 px-3 py-1 text-slate-300">
+            <span
+              key={tag}
+              className="rounded-full bg-slate-800/40 px-3 py-1 text-slate-300"
+            >
               {tag}
             </span>
           ))}

@@ -18,7 +18,7 @@ function updateTrace(
   agent: AgentTrace["agent"],
   status: AgentTrace["status"],
   elapsedMs?: number,
-  message?: string,
+  message?: string
 ) {
   const index = trace.findIndex((entry) => entry.agent === agent);
   if (index >= 0) {
@@ -31,7 +31,7 @@ function updateTrace(
 function buildItineraries(
   flights: FlightOffer[],
   hotels: LodgingOffer[],
-  query: StructuredTravelQuery,
+  query: StructuredTravelQuery
 ): ItineraryPackage[] {
   const combinations: ItineraryPackage[] = [];
   let counter = 1;
@@ -65,7 +65,7 @@ function buildItineraries(
 }
 
 export async function runTravelSearch(
-  request: NaturalLanguageSearchRequest,
+  request: NaturalLanguageSearchRequest
 ): Promise<SearchApiResponse> {
   const trace: AgentTrace[] = [
     { agent: "Coordinator", status: "running" },
@@ -81,7 +81,7 @@ export async function runTravelSearch(
     trace,
     "LLM Parser",
     "completed",
-    Math.round(performance.now() - llmStart),
+    Math.round(performance.now() - llmStart)
   );
 
   let flights: FlightOffer[] = [];
@@ -97,7 +97,7 @@ export async function runTravelSearch(
         "Flight Agent",
         "completed",
         Math.round(performance.now() - start),
-        `${flights.length} options ready`,
+        `${flights.length} options ready`
       );
     } catch (error) {
       console.error("Flight agent failed", error);
@@ -115,7 +115,7 @@ export async function runTravelSearch(
         "Hotel Agent",
         "completed",
         Math.round(performance.now() - start),
-        `${hotels.length} stays ready`,
+        `${hotels.length} stays ready`
       );
     } catch (error) {
       console.error("Hotel agent failed", error);
