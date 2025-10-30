@@ -27,6 +27,10 @@ export function BookingSheet({ itinerary, onClose, onSuccess, onError }: Booking
   const currency = (itinerary.totalPrice.currency ?? "AUD").toUpperCase();
   const stripeMode = (process.env.NEXT_PUBLIC_STRIPE_MODE ?? "test").toLowerCase();
   const isStripeTestMode = stripeMode === "test";
+  const checkoutAmount = useMemo(
+    () => (isStripeTestMode ? 1 : itinerary.totalPrice.amount),
+    [isStripeTestMode, itinerary.totalPrice.amount],
+  );
 
   const totalLabel = useMemo(
     () => itinerary.lodging.location || itinerary.headline,
@@ -70,7 +74,7 @@ export function BookingSheet({ itinerary, onClose, onSuccess, onError }: Booking
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             itineraryId: itinerary.id,
-            amount: itinerary.totalPrice.amount,
+            amount: checkoutAmount,
             currency,
             description: `${itinerary.flight.airline} + ${itinerary.lodging.name}`,
           }),
@@ -206,7 +210,7 @@ export function BookingSheet({ itinerary, onClose, onSuccess, onError }: Booking
       setPaymentRequest(null);
       setClientSecret(null);
     };
-  }, [currency, finalizeBooking, itinerary.flight.airline, itinerary.id, itinerary.lodging.name, itinerary.totalPrice.amount, onError, onSuccess, stripe, totalLabel]);
+  }, [checkoutAmount, currency, finalizeBooking, itinerary.flight.airline, itinerary.id, itinerary.lodging.name, onError, onSuccess, stripe, totalLabel]);
 
   async function handleSandboxCheckout() {
     try {
@@ -272,7 +276,7 @@ export function BookingSheet({ itinerary, onClose, onSuccess, onError }: Booking
             <div>
               <p className="text-xs uppercase tracking-wide text-emerald-300">Total</p>
               <p className="text-lg font-semibold text-emerald-100">
-                {formatCurrency(itinerary.totalPrice.amount, currency)}
+                {formatCurrency(checkoutAmount, currency)}
               </p>
             </div>
             <p className="text-xs text-emerald-200">Apple Pay powered by Stripe</p>
