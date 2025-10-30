@@ -1,7 +1,5 @@
 "use client";
 
-// added comment to trigger change detection
-
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   PaymentRequestButtonElement,
