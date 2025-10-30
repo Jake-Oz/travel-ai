@@ -1,13 +1,18 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  PaymentRequestButtonElement,
-  useStripe,
-} from "@stripe/react-stripe-js";
-import type { PaymentRequest } from "@stripe/stripe-js";
+import { PaymentRequestButtonElement, useStripe } from "@stripe/react-stripe-js";
+import type {
+  PaymentIntent,
+  PaymentRequest,
+  PaymentRequestPaymentMethodEvent,
+} from "@stripe/stripe-js";
 
-import type { BookingResponse, ItineraryPackage } from "@/lib/types/travel";
+import type {
+  BookingResponse,
+  BookingConfirmationPayload,
+  ItineraryPackage,
+} from "@/lib/types/travel";
 import { formatCurrency, formatDateTime } from "@/lib/utils/format";
 
 interface BookingSheetProps {
@@ -35,34 +40,84 @@ export function BookingSheet({
   const [intentAmount, setIntentAmount] = useState<number | undefined>();
   const [walletWarning, setWalletWarning] = useState<string | undefined>();
   const currency = (itinerary.totalPrice.currency ?? "AUD").toUpperCase();
-  const stripeMode = (
-    process.env.NEXT_PUBLIC_STRIPE_MODE ?? "test"
-  ).toLowerCase();
+  const stripeMode = (process.env.NEXT_PUBLIC_STRIPE_MODE ?? "test").toLowerCase();
   const isStripeTestMode = stripeMode === "test";
-  const checkoutAmount = useMemo(
-    () => (isStripeTestMode ? 1 : itinerary.totalPrice.amount),
-    [isStripeTestMode, itinerary.totalPrice.amount]
-  );
 
   const totalLabel = useMemo(
     () => itinerary.lodging.location || itinerary.headline,
     [itinerary.headline, itinerary.lodging.location]
   );
 
-  const finalizeBooking = useCallback(async (): Promise<BookingResponse> => {
-    const response = await fetch("/api/book", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ itineraryId: itinerary.id }),
-    });
+  const finalizeBooking = useCallback(
+    async (payload: BookingConfirmationPayload): Promise<BookingResponse> => {
+      const response = await fetch("/api/book", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
 
-    if (!response.ok) {
-      const text = await response.text();
-      throw new Error(text || "Unable to finalize booking");
-    }
+      if (!response.ok) {
+        const text = await response.text();
+        throw new Error(text || "Unable to finalize booking");
+      }
 
-    return (await response.json()) as BookingResponse;
-  }, [itinerary.id]);
+      return (await response.json()) as BookingResponse;
+    },
+    []
+  );
+
+  const buildBookingPayload = useCallback(
+    (overrides: Partial<BookingConfirmationPayload> = {}): BookingConfirmationPayload => {
+      const firstLeg = itinerary.flight.legs[0];
+      const lastLeg = itinerary.flight.legs[itinerary.flight.legs.length - 1];
+
+      return {
+        itineraryId: itinerary.id,
+        itineraryHeadline: itinerary.headline,
+        chargedAmount: {
+          amount: itinerary.totalPrice.amount,
+          currency,
+        },
+        flight: {
+          airline: itinerary.flight.airline,
+          flightNumber: itinerary.flight.flightNumber,
+          departureAirport: firstLeg?.departureAirport,
+          arrivalAirport: lastLeg?.arrivalAirport,
+          departureTime: firstLeg?.departureTime,
+          arrivalTime: lastLeg?.arrivalTime,
+        },
+        stay: {
+          name: itinerary.lodging.name,
+          location: itinerary.lodging.location,
+          checkIn: itinerary.lodging.checkIn,
+          checkOut: itinerary.lodging.checkOut,
+        },
+        ...overrides,
+      };
+    },
+    [currency, itinerary]
+  );
+
+  const handleFinalize = useCallback(
+    (overrides: Partial<BookingConfirmationPayload> = {}) =>
+      finalizeBooking(buildBookingPayload(overrides)),
+    [buildBookingPayload, finalizeBooking]
+  );
+
+  const resolvePaymentIntentId = (
+    intent?: PaymentIntent | null,
+    fallback?: PaymentIntent | null
+  ): string | undefined => intent?.id ?? fallback?.id;
+
+  const resolveCustomerEmail = (
+    event: PaymentRequestPaymentMethodEvent,
+    intent?: PaymentIntent | null
+  ): string | undefined => event.payerEmail ?? intent?.receipt_email ?? undefined;
+
+  const resolveCustomerName = (
+    event: PaymentRequestPaymentMethodEvent,
+    intent?: PaymentIntent | null
+  ): string | undefined => event.payerName ?? intent?.shipping?.name ?? undefined;
 
   useEffect(() => {
     let isMounted = true;
@@ -86,7 +141,7 @@ export function BookingSheet({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             itineraryId: itinerary.id,
-            amount: checkoutAmount,
+            amount: itinerary.totalPrice.amount,
             currency,
             description: `${itinerary.flight.airline} + ${itinerary.lodging.name}`,
           }),
@@ -143,7 +198,7 @@ export function BookingSheet({
         console.info("Stripe PaymentRequest capabilities", result);
 
         if (result?.applePay) {
-          request.on("paymentmethod", async (event) => {
+          request.on("paymentmethod", async (event: PaymentRequestPaymentMethodEvent) => {
             if (!secret) {
               event.complete("fail");
               setPaymentError("Payment session unavailable. Please retry.");
@@ -185,7 +240,21 @@ export function BookingSheet({
                 throw finalResult.error;
               }
 
-              const receipt = await finalizeBooking();
+              const paymentIntent = finalResult.paymentIntent ?? confirmation.paymentIntent;
+              const receipt = await handleFinalize({
+                paymentIntentId: resolvePaymentIntentId(
+                  paymentIntent,
+                  confirmation.paymentIntent
+                ),
+                customerEmail: resolveCustomerEmail(
+                  event,
+                  paymentIntent ?? confirmation.paymentIntent ?? null
+                ),
+                customerName: resolveCustomerName(
+                  event,
+                  paymentIntent ?? confirmation.paymentIntent ?? null
+                ),
+              });
               setPhase("completed");
               onSuccess(receipt);
             } catch (error) {
@@ -233,12 +302,12 @@ export function BookingSheet({
       setClientSecret(null);
     };
   }, [
-    checkoutAmount,
     currency,
-    finalizeBooking,
+    handleFinalize,
     itinerary.flight.airline,
     itinerary.id,
     itinerary.lodging.name,
+    itinerary.totalPrice.amount,
     onError,
     onSuccess,
     stripe,
@@ -248,7 +317,9 @@ export function BookingSheet({
   async function handleSandboxCheckout() {
     try {
       setPhase("processing");
-      const receipt = await finalizeBooking();
+      const receipt = await handleFinalize({
+        paymentIntentId: "sandbox-manual",
+      });
       setPhase("completed");
       onSuccess(receipt);
     } catch (error) {
@@ -322,7 +393,7 @@ export function BookingSheet({
                 Total
               </p>
               <p className="text-lg font-semibold text-emerald-100">
-                {formatCurrency(checkoutAmount, currency)}
+                {formatCurrency(itinerary.totalPrice.amount, currency)}
               </p>
             </div>
             <p className="text-xs text-emerald-200">

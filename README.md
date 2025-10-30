@@ -10,6 +10,7 @@ Travel-AI is a conversation-driven travel planning experience. Users describe th
 - OpenAI ChatGPT API for natural language understanding (via `openai`).
 - Amadeus sandbox integration for live flight and hotel availability (with graceful fallback data when credentials are absent).
 - Stripe Elements as the Apple Pay integration surface.
+- Optional Resend integration for post-booking confirmation emails.
 
 ### Getting Started
 
@@ -31,6 +32,8 @@ Travel-AI is a conversation-driven travel planning experience. Users describe th
 | `STRIPE_SECRET_KEY`                  | Optional | Enables server-side payment intent creation.                                                                |
 | `PAYMENTS_DEFAULT_COUNTRY`           | Optional | Fallback ISO country for Apple Pay merchant sessions (defaults to `AU`).                                    |
 | `PAYMENTS_DEFAULT_CURRENCY`          | Optional | Fallback currency code used when itineraries omit pricing (defaults to `AUD`).                              |
+| `RESEND_API_KEY`                     | Optional | Sends confirmation emails after successful bookings when set.                                               |
+| `RESEND_FROM_EMAIL`                  | Optional | Custom “from” address for confirmation emails (defaults to `notifications@travel-ai.dev`).                  |
 
 ### Project Structure Highlights
 
@@ -57,4 +60,5 @@ Stripe’s [Apple Pay web documentation](https://docs.stripe.com/apple-pay?platf
 1. Register your local dev domain (`localhost`, or the tunnel hostname) in Stripe’s Payment Method Domains settings.
 2. Keep `NEXT_PUBLIC_STRIPE_MODE=test` and use your real Apple Wallet card in Safari; the UI will remind you the payment is test-only.
 3. Inspect the Payment Intent in the Stripe dashboard (test mode) to verify it reaches `succeeded`; Stripe flags these as test transactions even though a real card authorised them.
-4. For end-to-end live verification, swap in live keys and make a small payment, then refund through the dashboard.
+4. Set `RESEND_API_KEY` if you’d like travellers to receive the booking confirmation email at the Apple Pay contact address.
+5. For end-to-end live verification, swap in live keys and make a small payment, then refund through the dashboard.

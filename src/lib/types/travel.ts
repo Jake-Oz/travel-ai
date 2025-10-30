@@ -117,13 +117,49 @@ export interface SearchApiResponse {
   trace: AgentTrace[];
 }
 
-export interface BookingRequest {
+export interface BookingFlightSummary {
+  airline: string;
+  flightNumber: string;
+  departureAirport?: string;
+  arrivalAirport?: string;
+  departureTime?: string;
+  arrivalTime?: string;
+}
+
+export interface BookingStaySummary {
+  name: string;
+  location?: string;
+  checkIn?: string;
+  checkOut?: string;
+}
+
+export interface BookingConfirmationPayload {
   itineraryId: string;
-  paymentIntentId: string;
-  contactEmail: string;
+  itineraryHeadline: string;
+  chargedAmount: {
+    amount: number;
+    currency: string;
+  };
+  paymentIntentId?: string;
+  customerEmail?: string;
+  customerName?: string;
+  flight?: BookingFlightSummary;
+  stay?: BookingStaySummary;
 }
 
 export interface BookingResponse {
   confirmationNumber: string;
   status: "confirmed" | "pending";
+  itineraryId: string;
+  itineraryHeadline: string;
+  chargedAmount: {
+    amount: number;
+    currency: string;
+  };
+  paymentIntentId?: string;
+  customerEmail?: string;
+  customerName?: string;
+  flight?: BookingFlightSummary;
+  stay?: BookingStaySummary;
+  bookingTimestamp: string;
 }
