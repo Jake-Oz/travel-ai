@@ -24,7 +24,9 @@ export function SearchExperience() {
     useState<ItineraryPackage | null>(null);
   const [isReceiptVisible, setIsReceiptVisible] = useState(false);
 
-  const stripeMode = (process.env.NEXT_PUBLIC_STRIPE_MODE ?? "test").toLowerCase();
+  const stripeMode = (
+    process.env.NEXT_PUBLIC_STRIPE_MODE ?? "test"
+  ).toLowerCase();
   const isStripeTestMode = stripeMode === "test";
 
   const handleSelect = useCallback((itinerary: ItineraryPackage) => {
@@ -37,13 +39,16 @@ export function SearchExperience() {
     setSelectedItinerary(null);
   }, []);
 
-  const handleBookingSuccess = useCallback((confirmation: BookingResponse) => {
-    setReceipt(confirmation);
-    setBookingError(null);
-    setConfirmedItinerary(selectedItinerary);
-    setIsReceiptVisible(true);
-    setSelectedItinerary(null);
-  }, [selectedItinerary]);
+  const handleBookingSuccess = useCallback(
+    (confirmation: BookingResponse) => {
+      setReceipt(confirmation);
+      setBookingError(null);
+      setConfirmedItinerary(selectedItinerary);
+      setIsReceiptVisible(true);
+      setSelectedItinerary(null);
+    },
+    [selectedItinerary]
+  );
 
   const handleBookingError = useCallback((message: string) => {
     setBookingError(message);
@@ -124,10 +129,16 @@ export function SearchExperience() {
                   <dt className="text-xs uppercase tracking-wide text-emerald-300">
                     Quoted total
                   </dt>
-                  <dd>{formatCurrency(confirmedItinerary.totalPrice.amount, confirmedItinerary.totalPrice.currency)}</dd>
+                  <dd>
+                    {formatCurrency(
+                      confirmedItinerary.totalPrice.amount,
+                      confirmedItinerary.totalPrice.currency
+                    )}
+                  </dd>
                   {isStripeTestMode && (
                     <p className="mt-1 text-[11px] text-emerald-300/80">
-                      Test mode authorised AUD 1.00 on your card; no funds are captured.
+                      Test mode authorised AUD 1.00 on your card; no funds are
+                      captured.
                     </p>
                   )}
                 </div>
@@ -136,12 +147,16 @@ export function SearchExperience() {
                     Flight
                   </dt>
                   <dd>
-                    {confirmedItinerary.flight.airline} {confirmedItinerary.flight.flightNumber}
+                    {confirmedItinerary.flight.airline}{" "}
+                    {confirmedItinerary.flight.flightNumber}
                   </dd>
                   <p className="text-[11px] text-emerald-200/80">
-                    {confirmedItinerary.flight.legs[0]?.departureAirport} →
-                    {" "}
-                    {confirmedItinerary.flight.legs[confirmedItinerary.flight.legs.length - 1]?.arrivalAirport}
+                    {confirmedItinerary.flight.legs[0]?.departureAirport} →{" "}
+                    {
+                      confirmedItinerary.flight.legs[
+                        confirmedItinerary.flight.legs.length - 1
+                      ]?.arrivalAirport
+                    }
                   </p>
                 </div>
                 <div>
@@ -155,11 +170,13 @@ export function SearchExperience() {
                 </div>
               </div>
 
-              {confirmedItinerary.lodging.checkIn && confirmedItinerary.lodging.checkOut && (
-                <p className="mt-4 text-xs text-emerald-200/80">
-                  Stay window {confirmedItinerary.lodging.checkIn} → {confirmedItinerary.lodging.checkOut}
-                </p>
-              )}
+              {confirmedItinerary.lodging.checkIn &&
+                confirmedItinerary.lodging.checkOut && (
+                  <p className="mt-4 text-xs text-emerald-200/80">
+                    Stay window {confirmedItinerary.lodging.checkIn} →{" "}
+                    {confirmedItinerary.lodging.checkOut}
+                  </p>
+                )}
             </div>
           )}
           {bookingError && (
