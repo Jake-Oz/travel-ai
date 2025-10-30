@@ -76,8 +76,26 @@ export function SearchExperience() {
             error={error}
             onSelect={handleSelect}
           />
-          {isReceiptVisible && receipt && (
-            <div className="overflow-hidden rounded-3xl border border-emerald-400/60 bg-emerald-600/15 p-6 shadow-lg shadow-emerald-900/20 transition-all duration-300">
+          {bookingError && (
+            <div className="rounded-3xl border border-rose-600/40 bg-rose-950/40 p-6 text-sm text-rose-100">
+              {bookingError}
+            </div>
+          )}
+        </div>
+      </div>
+      {selectedItinerary && (
+        <BookingSheet
+          itinerary={selectedItinerary}
+          onClose={handleCloseSheet}
+          onSuccess={handleBookingSuccess}
+          onError={handleBookingError}
+        />
+      )}
+      {isReceiptVisible && receipt && (
+        <div className="pointer-events-none">
+          <div className="fixed inset-0 z-40 flex items-end justify-center p-4 sm:items-center">
+            <div className="absolute inset-0 bg-slate-950/40 backdrop-blur-sm" />
+            <div className="relative z-10 w-full max-w-xl pointer-events-auto overflow-hidden rounded-3xl border border-emerald-400/60 bg-emerald-600/15 p-6 shadow-2xl shadow-emerald-900/40">
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div className="flex items-start gap-3">
                   <span className="mt-1 flex h-10 w-10 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-100">
@@ -203,21 +221,8 @@ export function SearchExperience() {
                 </p>
               )}
             </div>
-          )}
-          {bookingError && (
-            <div className="rounded-3xl border border-rose-600/40 bg-rose-950/40 p-6 text-sm text-rose-100">
-              {bookingError}
-            </div>
-          )}
+          </div>
         </div>
-      </div>
-      {selectedItinerary && (
-        <BookingSheet
-          itinerary={selectedItinerary}
-          onClose={handleCloseSheet}
-          onSuccess={handleBookingSuccess}
-          onError={handleBookingError}
-        />
       )}
     </div>
   );

@@ -18,7 +18,7 @@ export function SearchForm() {
   const [query, setQuery] = useState(
     "Find me an economy class flight from London to Paris next week and a 4-star hotel in Paris for 5 nights"
   );
-  const [travelClass, setTravelClass] = useState<TravelClass>("business");
+  const [travelClass, setTravelClass] = useState<TravelClass>("economy");
   const [passengers, setPassengers] = useState(1);
   const [nights, setNights] = useState(5);
   const [hotelLocation, setHotelLocation] = useState("Paris");
