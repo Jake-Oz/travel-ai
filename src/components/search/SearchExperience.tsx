@@ -37,15 +37,12 @@ export function SearchExperience() {
     setSelectedItinerary(null);
   }, []);
 
-  const handleBookingSuccess = useCallback(
-    (confirmation: BookingResponse) => {
-      setReceipt(confirmation);
-      setBookingError(null);
-      setIsReceiptVisible(true);
-      setSelectedItinerary(null);
-    },
-    []
-  );
+  const handleBookingSuccess = useCallback((confirmation: BookingResponse) => {
+    setReceipt(confirmation);
+    setBookingError(null);
+    setIsReceiptVisible(true);
+    setSelectedItinerary(null);
+  }, []);
 
   const handleBookingError = useCallback((message: string) => {
     setBookingError(message);
@@ -142,7 +139,8 @@ export function SearchExperience() {
                   )}
                   {isStripeTestMode && (
                     <p className="mt-1 text-[11px] text-emerald-300/80">
-                      Stripe test mode: this payment was authorised for validation only; no funds are captured.
+                      Stripe test mode: this payment was authorised for
+                      validation only; no funds are captured.
                     </p>
                   )}
                 </div>
@@ -155,16 +153,22 @@ export function SearchExperience() {
                       <dd>
                         {receipt.flight.airline} {receipt.flight.flightNumber}
                       </dd>
-                      {(receipt.flight.departureAirport || receipt.flight.arrivalAirport) && (
+                      {(receipt.flight.departureAirport ||
+                        receipt.flight.arrivalAirport) && (
                         <p className="text-[11px] text-emerald-200/80">
                           {receipt.flight.departureAirport ?? ""}
-                          {receipt.flight.departureAirport && receipt.flight.arrivalAirport ? " → " : ""}
+                          {receipt.flight.departureAirport &&
+                          receipt.flight.arrivalAirport
+                            ? " → "
+                            : ""}
                           {receipt.flight.arrivalAirport ?? ""}
                         </p>
                       )}
                     </>
                   ) : (
-                    <dd className="text-emerald-200/70">Flight details issued separately</dd>
+                    <dd className="text-emerald-200/70">
+                      Flight details issued separately
+                    </dd>
                   )}
                 </div>
                 <div>
@@ -181,7 +185,9 @@ export function SearchExperience() {
                       )}
                     </>
                   ) : (
-                    <dd className="text-emerald-200/70">Accommodation confirmed</dd>
+                    <dd className="text-emerald-200/70">
+                      Accommodation confirmed
+                    </dd>
                   )}
                 </div>
               </div>

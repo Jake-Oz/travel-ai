@@ -1,7 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { PaymentRequestButtonElement, useStripe } from "@stripe/react-stripe-js";
+import {
+  PaymentRequestButtonElement,
+  useStripe,
+} from "@stripe/react-stripe-js";
 import type {
   PaymentIntent,
   PaymentRequest,
@@ -40,7 +43,9 @@ export function BookingSheet({
   const [intentAmount, setIntentAmount] = useState<number | undefined>();
   const [walletWarning, setWalletWarning] = useState<string | undefined>();
   const currency = (itinerary.totalPrice.currency ?? "AUD").toUpperCase();
-  const stripeMode = (process.env.NEXT_PUBLIC_STRIPE_MODE ?? "test").toLowerCase();
+  const stripeMode = (
+    process.env.NEXT_PUBLIC_STRIPE_MODE ?? "test"
+  ).toLowerCase();
   const isStripeTestMode = stripeMode === "test";
 
   const totalLabel = useMemo(
@@ -67,7 +72,9 @@ export function BookingSheet({
   );
 
   const buildBookingPayload = useCallback(
-    (overrides: Partial<BookingConfirmationPayload> = {}): BookingConfirmationPayload => {
+    (
+      overrides: Partial<BookingConfirmationPayload> = {}
+    ): BookingConfirmationPayload => {
       const firstLeg = itinerary.flight.legs[0];
       const lastLeg = itinerary.flight.legs[itinerary.flight.legs.length - 1];
 
@@ -112,12 +119,14 @@ export function BookingSheet({
   const resolveCustomerEmail = (
     event: PaymentRequestPaymentMethodEvent,
     intent?: PaymentIntent | null
-  ): string | undefined => event.payerEmail ?? intent?.receipt_email ?? undefined;
+  ): string | undefined =>
+    event.payerEmail ?? intent?.receipt_email ?? undefined;
 
   const resolveCustomerName = (
     event: PaymentRequestPaymentMethodEvent,
     intent?: PaymentIntent | null
-  ): string | undefined => event.payerName ?? intent?.shipping?.name ?? undefined;
+  ): string | undefined =>
+    event.payerName ?? intent?.shipping?.name ?? undefined;
 
   useEffect(() => {
     let isMounted = true;
@@ -198,79 +207,83 @@ export function BookingSheet({
         console.info("Stripe PaymentRequest capabilities", result);
 
         if (result?.applePay) {
-          request.on("paymentmethod", async (event: PaymentRequestPaymentMethodEvent) => {
-            if (!secret) {
-              event.complete("fail");
-              setPaymentError("Payment session unavailable. Please retry.");
-              setPhase("error");
-              return;
-            }
-
-            setPhase("processing");
-            setPaymentError(undefined);
-
-            let isCompletedSuccessfully = false;
-
-            try {
-              const confirmation = await stripe.confirmCardPayment(
-                secret,
-                {
-                  payment_method: event.paymentMethod.id,
-                },
-                { handleActions: false }
-              );
-
-              if (confirmation.error) {
-                console.error(
-                  "Apple Pay confirmation error",
-                  confirmation.error
-                );
-                throw confirmation.error;
-              }
-
-              event.complete("success");
-              isCompletedSuccessfully = true;
-
-              const finalResult = await stripe.confirmCardPayment(secret);
-              if (finalResult.error) {
-                console.error(
-                  "Apple Pay authentication error",
-                  finalResult.error
-                );
-                throw finalResult.error;
-              }
-
-              const paymentIntent = finalResult.paymentIntent ?? confirmation.paymentIntent;
-              const receipt = await handleFinalize({
-                paymentIntentId: resolvePaymentIntentId(
-                  paymentIntent,
-                  confirmation.paymentIntent
-                ),
-                customerEmail: resolveCustomerEmail(
-                  event,
-                  paymentIntent ?? confirmation.paymentIntent ?? null
-                ),
-                customerName: resolveCustomerName(
-                  event,
-                  paymentIntent ?? confirmation.paymentIntent ?? null
-                ),
-              });
-              setPhase("completed");
-              onSuccess(receipt);
-            } catch (error) {
-              console.error("Apple Pay flow failed", error);
-              const message =
-                error instanceof Error
-                  ? error.message
-                  : "Apple Pay authorization failed";
-              setPaymentError(message);
-              setPhase("error");
-              if (!isCompletedSuccessfully) {
+          request.on(
+            "paymentmethod",
+            async (event: PaymentRequestPaymentMethodEvent) => {
+              if (!secret) {
                 event.complete("fail");
+                setPaymentError("Payment session unavailable. Please retry.");
+                setPhase("error");
+                return;
               }
-              onError(message);
+
+              setPhase("processing");
+              setPaymentError(undefined);
+
+              let isCompletedSuccessfully = false;
+
+              try {
+                const confirmation = await stripe.confirmCardPayment(
+                  secret,
+                  {
+                    payment_method: event.paymentMethod.id,
+                  },
+                  { handleActions: false }
+                );
+
+                if (confirmation.error) {
+                  console.error(
+                    "Apple Pay confirmation error",
+                    confirmation.error
+                  );
+                  throw confirmation.error;
+                }
+
+                event.complete("success");
+                isCompletedSuccessfully = true;
+
+                const finalResult = await stripe.confirmCardPayment(secret);
+                if (finalResult.error) {
+                  console.error(
+                    "Apple Pay authentication error",
+                    finalResult.error
+                  );
+                  throw finalResult.error;
+                }
+
+                const paymentIntent =
+                  finalResult.paymentIntent ?? confirmation.paymentIntent;
+                const receipt = await handleFinalize({
+                  paymentIntentId: resolvePaymentIntentId(
+                    paymentIntent,
+                    confirmation.paymentIntent
+                  ),
+                  customerEmail: resolveCustomerEmail(
+                    event,
+                    paymentIntent ?? confirmation.paymentIntent ?? null
+                  ),
+                  customerName: resolveCustomerName(
+                    event,
+                    paymentIntent ?? confirmation.paymentIntent ?? null
+                  ),
+                });
+                setPhase("completed");
+                onSuccess(receipt);
+              } catch (error) {
+                console.error("Apple Pay flow failed", error);
+                const message =
+                  error instanceof Error
+                    ? error.message
+                    : "Apple Pay authorization failed";
+                setPaymentError(message);
+                setPhase("error");
+                if (!isCompletedSuccessfully) {
+                  event.complete("fail");
+                }
+                onError(message);
+              }
             }
-          });
+          );
 
           setPaymentRequest(request);
           setWalletWarning(undefined);
