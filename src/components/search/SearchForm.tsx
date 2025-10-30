@@ -16,15 +16,15 @@ export function SearchForm() {
   const submit = useSearchStore((state) => state.submit);
   const isSubmitting = useSearchStore((state) => state.isSubmitting);
   const [query, setQuery] = useState(
-    "Find me a business class flight to Tokyo from Sydney next month and a 4-star hotel in Shinjuku for 5 nights"
+    "Find me an economy class flight from London to Paris next week and a 4-star hotel in Paris for 5 nights"
   );
   const [travelClass, setTravelClass] = useState<TravelClass>("business");
   const [passengers, setPassengers] = useState(1);
   const [nights, setNights] = useState(5);
-  const [hotelLocation, setHotelLocation] = useState("Shinjuku");
+  const [hotelLocation, setHotelLocation] = useState("Paris");
   const [hotelStars, setHotelStars] = useState(4);
   const [budget, setBudget] = useState("6000");
-  const [currency, setCurrency] = useState("USD");
+  const [currency, setCurrency] = useState("AUD");
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();

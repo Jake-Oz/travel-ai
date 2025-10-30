@@ -28,6 +28,7 @@ function buildMockFlights(query: StructuredTravelQuery): FlightOffer[] {
   const returnArrival = returnDeparture
     ? buildIso(query.returnDate as string, 22)
     : null;
+  const currency = (query.budget?.currency || "AUD").toUpperCase();
 
   const offers: FlightOffer[] = [
     {
@@ -60,7 +61,7 @@ function buildMockFlights(query: StructuredTravelQuery): FlightOffer[] {
         amount: query.budget?.amount
           ? Math.min(query.budget.amount * 0.6, 4200)
           : 3990,
-        currency: query.budget?.currency || "USD",
+        currency,
       },
       emissionsKg: 860,
       bookingUrl: "https://example.com/flight/az123",
@@ -85,7 +86,7 @@ function buildMockFlights(query: StructuredTravelQuery): FlightOffer[] {
         amount: query.budget?.amount
           ? Math.min(query.budget.amount * 0.5, 3300)
           : 2890,
-        currency: query.budget?.currency || "USD",
+        currency,
       },
       emissionsKg: 720,
       bookingUrl: "https://example.com/flight/sp456",

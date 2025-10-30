@@ -505,7 +505,11 @@ export async function searchAmadeusHotels(
     const totalAmount = offer?.price?.total
       ? Number.parseFloat(offer.price.total)
       : undefined;
-    const currency = offer?.price?.currency || query.budget?.currency || "USD";
+    const currency = (
+      offer?.price?.currency ||
+      query.budget?.currency ||
+      "AUD"
+    ).toUpperCase();
     const stayNights =
       query.nights ??
       Math.max(

@@ -12,7 +12,7 @@ function calculateStayTotal(rate: number, nights?: number | null): number {
 }
 
 function buildMockHotels(query: StructuredTravelQuery): LodgingOffer[] {
-  const currency = query.budget?.currency || "USD";
+  const currency = (query.budget?.currency || "AUD").toUpperCase();
   const nights = query.nights || 5;
   const keepsake = query.destinationCity.includes("Tokyo")
     ? "Shinjuku"

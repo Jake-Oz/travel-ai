@@ -47,6 +47,12 @@ function fallbackStructure(
   const defaultReturn = new Date(
     defaultDeparture.getTime() + 5 * 24 * 60 * 60 * 1000
   );
+  const preferenceBudget = request.preferences?.budget
+    ? {
+        ...request.preferences.budget,
+        currency: request.preferences.budget.currency.toUpperCase(),
+      }
+    : undefined;
 
   return {
     originCity: "Sydney",
@@ -61,10 +67,10 @@ function fallbackStructure(
       location: request.preferences?.hotelLocation || "Central",
     },
     budget:
-      request.preferences?.budget ||
+      preferenceBudget ||
       (request.preferences?.travelClass === "first"
-        ? { amount: 7500, currency: "USD" }
-        : { amount: 5200, currency: "USD" }),
+        ? { amount: 7500, currency: "AUD" }
+        : { amount: 5200, currency: "AUD" }),
     notes: request.query,
   };
 }

@@ -18,6 +18,32 @@ import type {
 } from "@/lib/types/travel";
 import { formatCurrency, formatDateTime } from "@/lib/utils/format";
 
+const zeroDecimalCurrencies = new Set([
+  "BIF",
+  "CLP",
+  "DJF",
+  "GNF",
+  "JPY",
+  "KMF",
+  "KRW",
+  "MGA",
+  "PYG",
+  "RWF",
+  "UGX",
+  "VND",
+  "VUV",
+  "XAF",
+  "XOF",
+  "XPF",
+]);
+
+function toMajorUnits(amount: number, currency: string): number {
+  const normalizedCurrency = currency.toUpperCase();
+  const divisor = zeroDecimalCurrencies.has(normalizedCurrency) ? 1 : 100;
+  if (divisor === 1) return amount;
+  return Math.round((amount / divisor) * 100) / 100;
+}
+
 interface BookingSheetProps {
   itinerary: ItineraryPackage;
   onClose: () => void;
@@ -58,7 +84,11 @@ export function BookingSheet({
       const response = await fetch("/api/book", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({
+          ...payload,
+          amount: payload.chargedAmount.amount,
+          currency: payload.chargedAmount.currency,
+        }),
       });
 
       if (!response.ok) {
@@ -106,8 +136,26 @@ export function BookingSheet({
   );
 
   const handleFinalize = useCallback(
-    (overrides: Partial<BookingConfirmationPayload> = {}) =>
-      finalizeBooking(buildBookingPayload(overrides)),
+    (
+      overrides: Partial<BookingConfirmationPayload> = {},
+      intent?: PaymentIntent | null
+    ) => {
+      const basePayload = buildBookingPayload();
+
+      let chargedAmount = overrides.chargedAmount ?? basePayload.chargedAmount;
+      if (intent?.amount && intent.currency) {
+        chargedAmount = {
+          amount: toMajorUnits(intent.amount, intent.currency),
+          currency: intent.currency.toUpperCase(),
+        };
+      }
+
+      return finalizeBooking({
+        ...basePayload,
+        ...overrides,
+        chargedAmount,
+      });
+    },
     [buildBookingPayload, finalizeBooking]
   );
 
@@ -253,20 +301,23 @@ export function BookingSheet({
 
                 const paymentIntent =
                   finalResult.paymentIntent ?? confirmation.paymentIntent;
-                const receipt = await handleFinalize({
-                  paymentIntentId: resolvePaymentIntentId(
-                    paymentIntent,
-                    confirmation.paymentIntent
-                  ),
-                  customerEmail: resolveCustomerEmail(
-                    event,
-                    paymentIntent ?? confirmation.paymentIntent ?? null
-                  ),
-                  customerName: resolveCustomerName(
-                    event,
-                    paymentIntent ?? confirmation.paymentIntent ?? null
-                  ),
-                });
+                const receipt = await handleFinalize(
+                  {
+                    paymentIntentId: resolvePaymentIntentId(
+                      paymentIntent,
+                      confirmation.paymentIntent
+                    ),
+                    customerEmail: resolveCustomerEmail(
+                      event,
+                      paymentIntent ?? confirmation.paymentIntent ?? null
+                    ),
+                    customerName: resolveCustomerName(
+                      event,
+                      paymentIntent ?? confirmation.paymentIntent ?? null
+                    ),
+                  },
+                  paymentIntent ?? confirmation.paymentIntent ?? null
+                );
                 setPhase("completed");
                 onSuccess(receipt);
               } catch (error) {
@@ -330,9 +381,12 @@ export function BookingSheet({
   async function handleSandboxCheckout() {
     try {
       setPhase("processing");
-      const receipt = await handleFinalize({
-        paymentIntentId: "sandbox-manual",
-      });
+      const receipt = await handleFinalize(
+        {
+          paymentIntentId: "sandbox-manual",
+        },
+        null
+      );
       setPhase("completed");
       onSuccess(receipt);
     } catch (error) {
