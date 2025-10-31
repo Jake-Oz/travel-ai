@@ -7,8 +7,15 @@ import type {
   TravelClass,
 } from "@/lib/types/travel";
 
+const AMADEUS_ENVIRONMENT = (
+  process.env.AMADEUS_ENVIRONMENT ?? "test"
+).toLowerCase();
+const DEFAULT_AMADEUS_BASE_URL =
+  AMADEUS_ENVIRONMENT === "production"
+    ? "https://api.amadeus.com"
+    : "https://test.api.amadeus.com";
 const AMADEUS_BASE_URL =
-  process.env.AMADEUS_BASE_URL || "https://test.api.amadeus.com";
+  process.env.AMADEUS_BASE_URL || DEFAULT_AMADEUS_BASE_URL;
 const AMADEUS_CLIENT_ID = process.env.AMADEUS_CLIENT_ID;
 const AMADEUS_CLIENT_SECRET = process.env.AMADEUS_CLIENT_SECRET;
 
@@ -174,6 +181,96 @@ const STATIC_AMADEUS_HOTEL_IDS: Record<string, string[]> = {
   MAD: ["ADMDPMAD", "ADMDPASL"],
 };
 
+type AmadeusErrorEntry = {
+  code?: string;
+  title?: string;
+  detail?: string;
+  status?: number;
+  source?: Record<string, unknown>;
+};
+
+export type AmadeusErrorCategory =
+  | "auth"
+  | "rate_limit"
+  | "server"
+  | "validation";
+
+export class AmadeusApiError extends Error {
+  readonly status: number;
+  readonly requestPath: string;
+  readonly errors: AmadeusErrorEntry[];
+  readonly rawBody?: string;
+  readonly retryAfterSeconds?: number;
+  readonly category: AmadeusErrorCategory;
+
+  constructor(options: {
+    status: number;
+    requestPath: string;
+    errors?: AmadeusErrorEntry[];
+    rawBody?: string;
+    retryAfterSeconds?: number;
+  }) {
+    const primary = options.errors?.[0];
+    const fallbackMessage = `Amadeus request failed (${options.status})`;
+    super(primary?.detail || primary?.title || fallbackMessage);
+    this.name = "AmadeusApiError";
+    this.status = options.status;
+    this.requestPath = options.requestPath;
+    this.errors = options.errors ?? [];
+    this.rawBody = options.rawBody;
+    this.retryAfterSeconds = options.retryAfterSeconds;
+    this.category = determineAmadeusCategory(options.status, primary?.code);
+  }
+
+  get primaryError(): AmadeusErrorEntry | undefined {
+    return this.errors[0];
+  }
+
+  get userMessage(): string {
+    const detail = this.primaryError?.detail || this.primaryError?.title;
+    switch (this.category) {
+      case "auth":
+        return (
+          detail ??
+          "Unable to authenticate with Amadeus. Please verify API credentials."
+        );
+      case "rate_limit":
+        return (
+          detail ??
+          "Amadeus rate limit reached. We will retry automatically in a moment."
+        );
+      case "server":
+        return (
+          detail ??
+          "Amadeus is currently unavailable. We will retry shortly and email you once confirmed."
+        );
+      default:
+        return (
+          detail ??
+          "Amadeus could not complete the request. Please review traveler details and try again."
+        );
+    }
+  }
+}
+
+export function isAmadeusApiError(error: unknown): error is AmadeusApiError {
+  return error instanceof AmadeusApiError;
+}
+
+function determineAmadeusCategory(
+  status: number,
+  code?: string
+): AmadeusErrorCategory {
+  if (status === 401 || status === 403) return "auth";
+  if (status === 429) return "rate_limit";
+  if (status >= 500) return "server";
+  if (code === "4926" || code === "4925") return "auth";
+  return "validation";
+}
+
+const MAX_AMADEUS_RETRY_ATTEMPTS = 3;
+const RATE_LIMIT_BASE_DELAY_MS = 500;
+
 function formatDateOnly(date: Date): string {
   return new Date(date.getTime() - date.getTimezoneOffset() * 60 * 1000)
     .toISOString()
@@ -270,63 +367,140 @@ async function getAccessToken(): Promise<string> {
   const data = payload as AmadeusAccessTokenResponse;
   tokenCache.token = data.access_token;
   tokenCache.expiresAt = now + (data.expires_in - 60) * 1000;
+  if (process.env.NODE_ENV !== "production") {
+    console.info(
+      `Amadeus access token refreshed (env: ${AMADEUS_ENVIRONMENT})`
+    );
+  }
   return tokenCache.token;
 }
 
 type AmadeusQueryParam = string | number | boolean | undefined | null;
 
+interface AmadeusFetchOptions {
+  path: string;
+  method: "GET" | "POST";
+  params?: Record<string, AmadeusQueryParam>;
+  body?: unknown;
+  attempt?: number;
+}
+
+async function delay(durationMs: number) {
+  return new Promise((resolve) => setTimeout(resolve, durationMs));
+}
+
+async function amadeusFetch<T>({
+  path,
+  method,
+  params,
+  body,
+  attempt = 1,
+}: AmadeusFetchOptions): Promise<T> {
+  const token = await getAccessToken();
+  const url = new URL(`${AMADEUS_BASE_URL}${path}`);
+  if (params) {
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== "") {
+        url.searchParams.set(key, String(value));
+      }
+    });
+  }
+
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${token}`,
+    Accept: "application/json",
+  };
+  if (method === "POST") {
+    headers["Content-Type"] = "application/json";
+  }
+
+  const response = await fetch(url.toString(), {
+    method,
+    headers,
+    body: method === "POST" ? JSON.stringify(body) : undefined,
+  });
+
+  if (response.ok) {
+    return (await response.json()) as T;
+  }
+
+  if (response.status === 401 && attempt < MAX_AMADEUS_RETRY_ATTEMPTS) {
+    console.warn(
+      "Amadeus access token rejected. Refreshing credentials and retrying."
+    );
+    tokenCache.token = "";
+    tokenCache.expiresAt = 0;
+    return amadeusFetch({
+      path,
+      method,
+      params,
+      body,
+      attempt: attempt + 1,
+    });
+  }
+
+  if (response.status === 429 && attempt < MAX_AMADEUS_RETRY_ATTEMPTS) {
+    const retryAfterHeader = response.headers.get("retry-after");
+    const retryAfterSeconds = retryAfterHeader
+      ? Number.parseInt(retryAfterHeader, 10)
+      : undefined;
+    const backoffMs = retryAfterSeconds
+      ? retryAfterSeconds * 1000
+      : Math.min(RATE_LIMIT_BASE_DELAY_MS * Math.pow(2, attempt - 1), 8000);
+    console.warn(
+      `Amadeus rate limit encountered. Retrying in ${
+        Math.round(backoffMs / 100) / 10
+      }s.`
+    );
+    await delay(backoffMs);
+    return amadeusFetch({
+      path,
+      method,
+      params,
+      body,
+      attempt: attempt + 1,
+    });
+  }
+
+  throw await buildAmadeusError(response, path);
+}
+
+async function buildAmadeusError(response: Response, path: string) {
+  const raw = await response.text();
+  let payload: unknown;
+  try {
+    payload = raw ? JSON.parse(raw) : undefined;
+  } catch {
+    payload = undefined;
+  }
+  const errors = Array.isArray((payload as { errors?: unknown }).errors)
+    ? (payload as { errors: AmadeusErrorEntry[] }).errors ?? []
+    : [];
+  const retryAfterHeader = response.headers.get("retry-after");
+  const retryAfterSeconds = retryAfterHeader
+    ? Number.parseInt(retryAfterHeader, 10)
+    : undefined;
+
+  return new AmadeusApiError({
+    status: response.status,
+    requestPath: path,
+    errors,
+    rawBody: raw,
+    retryAfterSeconds: Number.isFinite(retryAfterSeconds)
+      ? retryAfterSeconds
+      : undefined,
+  });
+}
+
 async function amadeusGet<T>(
   path: string,
   params: Record<string, AmadeusQueryParam>
 ): Promise<T> {
-  const token = await getAccessToken();
-  const url = new URL(`${AMADEUS_BASE_URL}${path}`);
-  Object.entries(params).forEach(([key, value]) => {
-    if (value !== undefined && value !== null && value !== "") {
-      url.searchParams.set(
-        key,
-        typeof value === "boolean" ? String(value) : String(value)
-      );
-    }
-  });
-
-  const response = await fetch(url.toString(), {
-    headers: {
-      Authorization: `Bearer ${token}`,
-      Accept: "application/json",
-    },
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(
-      `Amadeus request failed (${response.status}): ${errorText}`
-    );
-  }
-
-  return (await response.json()) as T;
+  return amadeusFetch<T>({ path, method: "GET", params });
 }
 
 async function amadeusPost<T>(path: string, body: unknown): Promise<T> {
-  const token = await getAccessToken();
-  const response = await fetch(`${AMADEUS_BASE_URL}${path}`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      Accept: "application/json",
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(body),
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(
-      `Amadeus request failed (${response.status}): ${errorText}`
-    );
-  }
-
-  return (await response.json()) as T;
+  return amadeusFetch<T>({ path, method: "POST", body });
 }
 
 async function resolveCityCode(cityName: string): Promise<string> {

@@ -37,11 +37,46 @@ const zeroDecimalCurrencies = new Set([
   "XPF",
 ]);
 
+const VALIDATION_ERROR_MESSAGE =
+  "Complete the highlighted traveller and contact details before continuing.";
+
 function toMajorUnits(amount: number, currency: string): number {
   const normalizedCurrency = currency.toUpperCase();
   const divisor = zeroDecimalCurrencies.has(normalizedCurrency) ? 1 : 100;
   if (divisor === 1) return amount;
   return Math.round((amount / divisor) * 100) / 100;
+}
+
+function parseISODate(value: string): Date | null {
+  const match = /^([0-9]{4})-([0-9]{2})-([0-9]{2})$/.exec(value);
+  if (!match) return null;
+  const [, yearStr, monthStr, dayStr] = match;
+  const year = Number(yearStr);
+  const month = Number(monthStr);
+  const day = Number(dayStr);
+  if (month < 1 || month > 12) return null;
+  if (day < 1 || day > 31) return null;
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (
+    date.getUTCFullYear() !== year ||
+    date.getUTCMonth() !== month - 1 ||
+    date.getUTCDate() !== day
+  ) {
+    return null;
+  }
+  return date;
+}
+
+function isBeforeToday(date: Date): boolean {
+  const now = new Date();
+  const todayUTC = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+  return date.getTime() < todayUTC;
+}
+
+function isAfterToday(date: Date): boolean {
+  const now = new Date();
+  const todayUTC = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+  return date.getTime() > todayUTC;
 }
 
 function splitFullName(fullName?: string | null): {
@@ -93,6 +128,22 @@ function derivePhoneComponents(phone?: string | null): {
   };
 }
 
+const INPUT_BASE_CLASS =
+  "w-full rounded-xl border bg-slate-950/60 px-3 py-2 text-slate-100 outline-none transition focus:ring-2 focus:ring-emerald-500/40";
+
+function inputClassName(
+  error?: string,
+  filled?: boolean,
+  extra?: string
+): string {
+  const borderClass = error
+    ? "border-rose-500/60 focus:border-rose-400"
+    : filled
+    ? "border-emerald-500/60 focus:border-emerald-400"
+    : "border-slate-800/60 focus:border-emerald-400";
+  return `${INPUT_BASE_CLASS} ${borderClass}${extra ? ` ${extra}` : ""}`;
+}
+
 interface BookingSheetProps {
   itinerary: ItineraryPackage;
   onClose: () => void;
@@ -101,6 +152,18 @@ interface BookingSheetProps {
 }
 
 type BookingPhase = "loading" | "ready" | "processing" | "completed" | "error";
+
+type ValidationErrors = {
+  travelerFirstName?: string;
+  travelerLastName?: string;
+  travelerDateOfBirth?: string;
+  travelerNationality?: string;
+  travelerPassportNumber?: string;
+  travelerPassportExpiry?: string;
+  travelerPassportIssuanceCountry?: string;
+  customerEmail?: string;
+  customerPhone?: string;
+};
 
 export function BookingSheet({
   itinerary,
@@ -117,6 +180,7 @@ export function BookingSheet({
   const [paymentError, setPaymentError] = useState<string | undefined>();
   const [intentAmount, setIntentAmount] = useState<number | undefined>();
   const [walletWarning, setWalletWarning] = useState<string | undefined>();
+  const [showValidationErrors, setShowValidationErrors] = useState(false);
   const [travelerFirstName, setTravelerFirstName] = useState<string>("");
   const [travelerLastName, setTravelerLastName] = useState<string>("");
   const [travelerDateOfBirth, setTravelerDateOfBirth] = useState<string>("");
@@ -162,6 +226,180 @@ export function BookingSheet({
     process.env.NEXT_PUBLIC_STRIPE_MODE ?? "test"
   ).toLowerCase();
   const isStripeTestMode = stripeMode === "test";
+
+  const validationErrors = useMemo<ValidationErrors>(() => {
+    const errors: ValidationErrors = {};
+
+    const firstName = travelerFirstName.trim();
+    if (!firstName) {
+      errors.travelerFirstName = "First name is required.";
+    }
+
+    const lastName = travelerLastName.trim();
+    if (!lastName) {
+      errors.travelerLastName = "Last name is required.";
+    }
+
+    const dobRaw = travelerDateOfBirth.trim();
+    if (!dobRaw) {
+      errors.travelerDateOfBirth = "Date of birth is required.";
+    } else {
+      const parsed = parseISODate(dobRaw);
+      if (!parsed) {
+        errors.travelerDateOfBirth = "Use the format YYYY-MM-DD.";
+      } else if (!isBeforeToday(parsed)) {
+        errors.travelerDateOfBirth = "Date of birth must be in the past.";
+      }
+    }
+
+    const nationality = travelerNationality.trim();
+    if (!/^[A-Z]{2}$/.test(nationality)) {
+      errors.travelerNationality = "Use a 2-letter ISO country code.";
+    }
+
+    const passportNumber = travelerPassportNumber.trim();
+    if (!passportNumber) {
+      errors.travelerPassportNumber = "Passport number is required.";
+    } else if (passportNumber.length < 5) {
+      errors.travelerPassportNumber = "Passport number looks too short.";
+    }
+
+    const passportExpiryRaw = travelerPassportExpiry.trim();
+    if (!passportExpiryRaw) {
+      errors.travelerPassportExpiry = "Passport expiry is required.";
+    } else {
+      const parsed = parseISODate(passportExpiryRaw);
+      if (!parsed) {
+        errors.travelerPassportExpiry = "Use the format YYYY-MM-DD.";
+      } else if (!isAfterToday(parsed)) {
+        errors.travelerPassportExpiry =
+          "Passport must be valid for future travel.";
+      }
+    }
+
+    const issuance = travelerPassportIssuanceCountry.trim();
+    if (!/^[A-Z]{2}$/.test(issuance)) {
+      errors.travelerPassportIssuanceCountry =
+        "Use a 2-letter ISO country code.";
+    }
+
+    const email = customerEmail.trim();
+    if (!email) {
+      errors.customerEmail = "Contact email is required.";
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      errors.customerEmail = "Enter a valid email address.";
+    }
+
+    const phone = customerPhone.trim();
+    if (!phone) {
+      errors.customerPhone = "Contact phone is required.";
+    } else if (!/^\+[1-9][0-9]{6,14}$/.test(phone)) {
+      errors.customerPhone = "Use international format like +61412345678.";
+    } else {
+      const components = derivePhoneComponents(phone);
+      if (!components.countryCode || !components.number) {
+        errors.customerPhone = "Unable to read that phone number.";
+      }
+    }
+
+    return errors;
+  }, [
+    customerEmail,
+    customerPhone,
+    travelerDateOfBirth,
+    travelerFirstName,
+    travelerLastName,
+    travelerNationality,
+    travelerPassportExpiry,
+    travelerPassportIssuanceCountry,
+    travelerPassportNumber,
+  ]);
+
+  const hasValidationErrors = useMemo(
+    () => Object.values(validationErrors).some(Boolean),
+    [validationErrors]
+  );
+
+  const firstNameError =
+    showValidationErrors || travelerFirstName.trim().length > 0
+      ? validationErrors.travelerFirstName
+      : undefined;
+  const lastNameError =
+    showValidationErrors || travelerLastName.trim().length > 0
+      ? validationErrors.travelerLastName
+      : undefined;
+  const dateOfBirthError =
+    showValidationErrors || travelerDateOfBirth.trim().length > 0
+      ? validationErrors.travelerDateOfBirth
+      : undefined;
+  const nationalityError =
+    showValidationErrors || travelerNationality.trim().length > 0
+      ? validationErrors.travelerNationality
+      : undefined;
+  const passportNumberError =
+    showValidationErrors || travelerPassportNumber.trim().length > 0
+      ? validationErrors.travelerPassportNumber
+      : undefined;
+  const passportExpiryError =
+    showValidationErrors || travelerPassportExpiry.trim().length > 0
+      ? validationErrors.travelerPassportExpiry
+      : undefined;
+  const passportIssuanceError =
+    showValidationErrors || travelerPassportIssuanceCountry.trim().length > 0
+      ? validationErrors.travelerPassportIssuanceCountry
+      : undefined;
+  const emailError =
+    showValidationErrors || customerEmail.trim().length > 0
+      ? validationErrors.customerEmail
+      : undefined;
+  const phoneError =
+    showValidationErrors || customerPhone.trim().length > 0
+      ? validationErrors.customerPhone
+      : undefined;
+
+  const firstNameFilled = travelerFirstName.trim().length > 0;
+  const lastNameFilled = travelerLastName.trim().length > 0;
+  const dateOfBirthFilled = travelerDateOfBirth.trim().length > 0;
+  const nationalityFilled = travelerNationality.trim().length > 0;
+  const passportNumberFilled = travelerPassportNumber.trim().length > 0;
+  const passportExpiryFilled = travelerPassportExpiry.trim().length > 0;
+  const passportIssuanceFilled =
+    travelerPassportIssuanceCountry.trim().length > 0;
+  const emailFilled = customerEmail.trim().length > 0;
+  const phoneFilled = customerPhone.trim().length > 0;
+  const isProcessingCheckout = phase === "processing";
+
+  const travelerFullName = [travelerFirstName.trim(), travelerLastName.trim()]
+    .filter(Boolean)
+    .join(" ");
+  const summaryNationality = travelerNationality.trim().toUpperCase() || "";
+  const summaryPassportCountry =
+    travelerPassportIssuanceCountry.trim().toUpperCase() || "";
+  const showSummaryCard =
+    Boolean(travelerFullName) ||
+    dateOfBirthFilled ||
+    nationalityFilled ||
+    passportNumberFilled ||
+    passportExpiryFilled ||
+    emailFilled ||
+    phoneFilled;
+
+  useEffect(() => {
+    if (!showValidationErrors) return;
+    if (!hasValidationErrors && paymentError === VALIDATION_ERROR_MESSAGE) {
+      setPaymentError(undefined);
+    }
+  }, [hasValidationErrors, paymentError, showValidationErrors]);
+
+  const ensureFormIsValid = useCallback(() => {
+    setShowValidationErrors(true);
+    if (hasValidationErrors) {
+      setPhase("ready");
+      setPaymentError(VALIDATION_ERROR_MESSAGE);
+      return false;
+    }
+    return true;
+  }, [hasValidationErrors]);
 
   const totalLabel = useMemo(
     () => itinerary.lodging.location || itinerary.headline,
@@ -441,6 +679,11 @@ export function BookingSheet({
                 return;
               }
 
+              if (!ensureFormIsValid()) {
+                event.complete("fail");
+                return;
+              }
+
               setPhase("processing");
               setPaymentError(undefined);
 
@@ -495,7 +738,7 @@ export function BookingSheet({
                   phone: resolvedPhone,
                 });
 
-                const receipt = await handleFinalize(
+                const receipt: BookingResponse = await handleFinalize(
                   {
                     paymentIntentId: resolvePaymentIntentId(
                       paymentIntent,
@@ -558,6 +801,7 @@ export function BookingSheet({
     currency,
     handleFinalize,
     applyPaymentContact,
+    ensureFormIsValid,
     itinerary.flight.airline,
     itinerary.id,
     itinerary.lodging.name,
@@ -569,9 +813,12 @@ export function BookingSheet({
   ]);
 
   async function handleSandboxCheckout() {
+    if (!ensureFormIsValid()) {
+      return;
+    }
     try {
       setPhase("processing");
-      const receipt = await handleFinalize(
+      const receipt: BookingResponse = await handleFinalize(
         {
           paymentIntentId: "sandbox-manual",
         },
@@ -591,277 +838,469 @@ export function BookingSheet({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 px-4 py-8">
-      <div className="w-full max-w-xl rounded-3xl border border-slate-800/60 bg-slate-950 p-6 shadow-2xl">
-        <header className="flex items-start justify-between gap-4">
-          <div>
-            <p className="text-xs uppercase tracking-wide text-slate-500">
-              Confirm itinerary
-            </p>
-            <h2 className="text-2xl font-semibold text-slate-100">
-              {itinerary.headline}
-            </h2>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-full border border-slate-700 px-3 py-1 text-xs uppercase tracking-wide text-slate-300 transition hover:border-slate-500 hover:text-slate-100"
-          >
-            Close
-          </button>
-        </header>
-
-        <div className="mt-6 space-y-4 text-sm text-slate-300">
-          <section className="rounded-2xl border border-slate-800/40 bg-slate-900/50 p-4">
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-              Flight
-            </h3>
-            <p className="mt-1 font-semibold text-slate-100">
-              {itinerary.flight.airline} {itinerary.flight.flightNumber}
-            </p>
-            <p className="text-xs text-slate-500">
-              {formatDateTime(itinerary.flight.legs[0]?.departureTime)} →{" "}
-              {formatDateTime(
-                itinerary.flight.legs[itinerary.flight.legs.length - 1]
-                  ?.arrivalTime
-              )}
-            </p>
-          </section>
-
-          <section className="rounded-2xl border border-slate-800/40 bg-slate-900/50 p-4">
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-              Stay
-            </h3>
-            <p className="mt-1 font-semibold text-slate-100">
-              {itinerary.lodging.name}
-            </p>
-            <p className="text-xs text-slate-500">
-              {itinerary.lodging.location}
-            </p>
-            <p className="text-xs text-slate-500">
-              Check-in {itinerary.lodging.checkIn} · Check-out{" "}
-              {itinerary.lodging.checkOut}
-            </p>
-          </section>
-
-          <div className="flex items-center justify-between rounded-2xl border border-emerald-400/40 bg-emerald-500/10 p-4">
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/80">
+      <div className="flex min-h-full items-start justify-center px-4 py-8 sm:items-center">
+        <div className="w-full max-w-xl rounded-3xl border border-slate-800/60 bg-slate-950 p-6 shadow-2xl">
+          <header className="flex items-start justify-between gap-4">
             <div>
-              <p className="text-xs uppercase tracking-wide text-emerald-300">
-                Total
+              <p className="text-xs uppercase tracking-wide text-slate-500">
+                Confirm itinerary
               </p>
-              <p className="text-lg font-semibold text-emerald-100">
-                {formatCurrency(itinerary.totalPrice.amount, currency)}
-              </p>
+              <h2 className="text-2xl font-semibold text-slate-100">
+                {itinerary.headline}
+              </h2>
             </div>
-            <p className="text-xs text-emerald-200">
-              Apple Pay powered by Stripe
-            </p>
-          </div>
-        </div>
-
-        <section className="mt-6 space-y-4 rounded-2xl border border-slate-800/40 bg-slate-900/50 p-4 text-sm text-slate-300">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                Lead traveller contact
-              </h3>
-              <p className="mt-1 text-[11px] text-slate-500">
-                Required for Amadeus ticketing. Sandbox accepts placeholder
-                documents if you don&apos;t have real details yet.
-              </p>
-            </div>
-          </div>
-
-          <div className="grid gap-3 sm:grid-cols-2">
-            <label className="space-y-1">
-              <span className="text-xs uppercase tracking-wide text-slate-500">
-                First name
-              </span>
-              <input
-                type="text"
-                value={travelerFirstName}
-                onChange={(event) => setTravelerFirstName(event.target.value)}
-                placeholder="Alex"
-                className="w-full rounded-xl border border-slate-800/60 bg-slate-950/60 px-3 py-2 text-slate-100 outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/40"
-              />
-            </label>
-            <label className="space-y-1">
-              <span className="text-xs uppercase tracking-wide text-slate-500">
-                Last name
-              </span>
-              <input
-                type="text"
-                value={travelerLastName}
-                onChange={(event) => setTravelerLastName(event.target.value)}
-                placeholder="Walker"
-                className="w-full rounded-xl border border-slate-800/60 bg-slate-950/60 px-3 py-2 text-slate-100 outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/40"
-              />
-            </label>
-          </div>
-
-          <div className="grid gap-3 sm:grid-cols-2">
-            <label className="space-y-1">
-              <span className="text-xs uppercase tracking-wide text-slate-500">
-                Date of birth
-              </span>
-              <input
-                type="date"
-                value={travelerDateOfBirth}
-                onChange={(event) => setTravelerDateOfBirth(event.target.value)}
-                className="w-full rounded-xl border border-slate-800/60 bg-slate-950/60 px-3 py-2 text-slate-100 outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/40"
-              />
-            </label>
-            <label className="space-y-1">
-              <span className="text-xs uppercase tracking-wide text-slate-500">
-                Nationality (ISO code)
-              </span>
-              <input
-                type="text"
-                inputMode="text"
-                maxLength={2}
-                value={travelerNationality}
-                onChange={(event) =>
-                  setTravelerNationality(event.target.value.toUpperCase())
-                }
-                className="w-full rounded-xl border border-slate-800/60 bg-slate-950/60 px-3 py-2 text-slate-100 uppercase outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/40"
-              />
-            </label>
-          </div>
-
-          <div className="grid gap-3 sm:grid-cols-2">
-            <label className="space-y-1">
-              <span className="text-xs uppercase tracking-wide text-slate-500">
-                Passport number
-              </span>
-              <input
-                type="text"
-                value={travelerPassportNumber}
-                onChange={(event) =>
-                  setTravelerPassportNumber(event.target.value.toUpperCase())
-                }
-                placeholder="PA1234567"
-                className="w-full rounded-xl border border-slate-800/60 bg-slate-950/60 px-3 py-2 text-slate-100 uppercase outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/40"
-              />
-            </label>
-            <label className="space-y-1">
-              <span className="text-xs uppercase tracking-wide text-slate-500">
-                Passport expiry
-              </span>
-              <input
-                type="date"
-                value={travelerPassportExpiry}
-                onChange={(event) =>
-                  setTravelerPassportExpiry(event.target.value)
-                }
-                className="w-full rounded-xl border border-slate-800/60 bg-slate-950/60 px-3 py-2 text-slate-100 outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/40"
-              />
-            </label>
-          </div>
-
-          <div className="grid gap-3 sm:grid-cols-2">
-            <label className="space-y-1">
-              <span className="text-xs uppercase tracking-wide text-slate-500">
-                Passport issuance country (ISO)
-              </span>
-              <input
-                type="text"
-                maxLength={2}
-                value={travelerPassportIssuanceCountry}
-                onChange={(event) =>
-                  setTravelerPassportIssuanceCountry(
-                    event.target.value.toUpperCase()
-                  )
-                }
-                className="w-full rounded-xl border border-slate-800/60 bg-slate-950/60 px-3 py-2 text-slate-100 uppercase outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/40"
-              />
-            </label>
-            <label className="space-y-1">
-              <span className="text-xs uppercase tracking-wide text-slate-500">
-                Contact email
-              </span>
-              <input
-                type="email"
-                value={customerEmail}
-                onChange={(event) => setCustomerEmail(event.target.value)}
-                placeholder="alex@example.com"
-                className="w-full rounded-xl border border-slate-800/60 bg-slate-950/60 px-3 py-2 text-slate-100 outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/40"
-              />
-            </label>
-          </div>
-
-          <label className="space-y-1">
-            <span className="text-xs uppercase tracking-wide text-slate-500">
-              Contact phone (E.164)
-            </span>
-            <input
-              type="tel"
-              value={customerPhone}
-              onChange={(event) => setCustomerPhone(event.target.value)}
-              placeholder="+61412345678"
-              className="w-full rounded-xl border border-slate-800/60 bg-slate-950/60 px-3 py-2 text-slate-100 outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/40"
-            />
-          </label>
-        </section>
-
-        <div className="mt-6 space-y-3">
-          {phase === "loading" && (
-            <div className="rounded-2xl border border-slate-800/40 bg-slate-900/50 p-4 text-sm text-slate-400">
-              Initializing secure payment session…
-            </div>
-          )}
-
-          {paymentRequest && clientSecret && (
-            <PaymentRequestButtonElement
-              options={{
-                paymentRequest,
-                style: {
-                  paymentRequestButton: {
-                    theme: "dark",
-                    height: "48px",
-                    type: "buy",
-                  },
-                },
-              }}
-              className="w-full overflow-hidden rounded-2xl"
-            />
-          )}
-
-          {(!paymentRequest || !intentAmount) && (
             <button
               type="button"
-              onClick={handleSandboxCheckout}
-              disabled={phase === "processing"}
-              className="w-full rounded-2xl border border-slate-700 bg-slate-900 px-4 py-3 text-sm font-semibold text-slate-200 transition hover:border-emerald-400 hover:text-emerald-200 disabled:cursor-not-allowed disabled:opacity-60"
+              onClick={onClose}
+              className="rounded-full border border-slate-700 px-3 py-1 text-xs uppercase tracking-wide text-slate-300 transition hover:border-slate-500 hover:text-slate-100"
             >
-              Complete booking (sandbox)
+              Close
             </button>
-          )}
+          </header>
 
-          {paymentError && (
-            <div className="rounded-2xl border border-rose-500/40 bg-rose-900/40 p-4 text-xs text-rose-100">
-              {paymentError}
+          <div className="mt-6 space-y-4 text-sm text-slate-300">
+            <section className="rounded-2xl border border-slate-800/40 bg-slate-900/50 p-4">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Flight
+              </h3>
+              <p className="mt-1 font-semibold text-slate-100">
+                {itinerary.flight.airline} {itinerary.flight.flightNumber}
+              </p>
+              <p className="text-xs text-slate-500">
+                {formatDateTime(itinerary.flight.legs[0]?.departureTime)} →{" "}
+                {formatDateTime(
+                  itinerary.flight.legs[itinerary.flight.legs.length - 1]
+                    ?.arrivalTime
+                )}
+              </p>
+            </section>
+
+            <section className="rounded-2xl border border-slate-800/40 bg-slate-900/50 p-4">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Stay
+              </h3>
+              <p className="mt-1 font-semibold text-slate-100">
+                {itinerary.lodging.name}
+              </p>
+              <p className="text-xs text-slate-500">
+                {itinerary.lodging.location}
+              </p>
+              <p className="text-xs text-slate-500">
+                Check-in {itinerary.lodging.checkIn} · Check-out{" "}
+                {itinerary.lodging.checkOut}
+              </p>
+            </section>
+
+            <div className="flex items-center justify-between rounded-2xl border border-emerald-400/40 bg-emerald-500/10 p-4">
+              <div>
+                <p className="text-xs uppercase tracking-wide text-emerald-300">
+                  Total
+                </p>
+                <p className="text-lg font-semibold text-emerald-100">
+                  {formatCurrency(itinerary.totalPrice.amount, currency)}
+                </p>
+              </div>
+              <p className="text-xs text-emerald-200">
+                Apple Pay powered by Stripe
+              </p>
             </div>
-          )}
+          </div>
 
-          {walletWarning && (
-            <div className="rounded-2xl border border-amber-400/40 bg-amber-500/10 p-4 text-xs text-amber-200">
-              {walletWarning}
+          <section className="mt-6 space-y-4 rounded-2xl border border-slate-800/40 bg-slate-900/50 p-4 text-sm text-slate-300">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Lead traveller contact
+                </h3>
+                <p className="mt-1 text-[11px] text-slate-500">
+                  Required for Amadeus ticketing. Sandbox accepts placeholder
+                  documents if you don&apos;t have real details yet.
+                </p>
+              </div>
             </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="space-y-1">
+                <span className="text-xs uppercase tracking-wide text-slate-500">
+                  First name
+                </span>
+                <input
+                  type="text"
+                  value={travelerFirstName}
+                  onChange={(event) => setTravelerFirstName(event.target.value)}
+                  placeholder="Alex"
+                  aria-invalid={Boolean(firstNameError)}
+                  className={inputClassName(firstNameError, firstNameFilled)}
+                />
+                {firstNameError && (
+                  <p className="text-[11px] text-rose-300">{firstNameError}</p>
+                )}
+              </label>
+              <label className="space-y-1">
+                <span className="text-xs uppercase tracking-wide text-slate-500">
+                  Last name
+                </span>
+                <input
+                  type="text"
+                  value={travelerLastName}
+                  onChange={(event) => setTravelerLastName(event.target.value)}
+                  placeholder="Walker"
+                  aria-invalid={Boolean(lastNameError)}
+                  className={inputClassName(lastNameError, lastNameFilled)}
+                />
+                {lastNameError && (
+                  <p className="text-[11px] text-rose-300">{lastNameError}</p>
+                )}
+              </label>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="space-y-1">
+                <span className="text-xs uppercase tracking-wide text-slate-500">
+                  Date of birth
+                </span>
+                <input
+                  type="date"
+                  value={travelerDateOfBirth}
+                  onChange={(event) =>
+                    setTravelerDateOfBirth(event.target.value)
+                  }
+                  aria-invalid={Boolean(dateOfBirthError)}
+                  className={inputClassName(
+                    dateOfBirthError,
+                    dateOfBirthFilled
+                  )}
+                />
+                {dateOfBirthError && (
+                  <p className="text-[11px] text-rose-300">
+                    {dateOfBirthError}
+                  </p>
+                )}
+              </label>
+              <label className="space-y-1">
+                <span className="text-xs uppercase tracking-wide text-slate-500">
+                  Nationality (ISO code)
+                </span>
+                <input
+                  type="text"
+                  inputMode="text"
+                  maxLength={2}
+                  value={travelerNationality}
+                  onChange={(event) =>
+                    setTravelerNationality(event.target.value.toUpperCase())
+                  }
+                  aria-invalid={Boolean(nationalityError)}
+                  className={inputClassName(
+                    nationalityError,
+                    nationalityFilled,
+                    "uppercase"
+                  )}
+                />
+                {nationalityError && (
+                  <p className="text-[11px] text-rose-300">
+                    {nationalityError}
+                  </p>
+                )}
+              </label>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="space-y-1">
+                <span className="text-xs uppercase tracking-wide text-slate-500">
+                  Passport number
+                </span>
+                <input
+                  type="text"
+                  value={travelerPassportNumber}
+                  onChange={(event) =>
+                    setTravelerPassportNumber(event.target.value.toUpperCase())
+                  }
+                  placeholder="PA1234567"
+                  aria-invalid={Boolean(passportNumberError)}
+                  className={inputClassName(
+                    passportNumberError,
+                    passportNumberFilled,
+                    "uppercase"
+                  )}
+                />
+                {passportNumberError && (
+                  <p className="text-[11px] text-rose-300">
+                    {passportNumberError}
+                  </p>
+                )}
+              </label>
+              <label className="space-y-1">
+                <span className="text-xs uppercase tracking-wide text-slate-500">
+                  Passport expiry
+                </span>
+                <input
+                  type="date"
+                  value={travelerPassportExpiry}
+                  onChange={(event) =>
+                    setTravelerPassportExpiry(event.target.value)
+                  }
+                  aria-invalid={Boolean(passportExpiryError)}
+                  className={inputClassName(
+                    passportExpiryError,
+                    passportExpiryFilled
+                  )}
+                />
+                {passportExpiryError && (
+                  <p className="text-[11px] text-rose-300">
+                    {passportExpiryError}
+                  </p>
+                )}
+              </label>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="space-y-1">
+                <span className="text-xs uppercase tracking-wide text-slate-500">
+                  Passport issuance country (ISO)
+                </span>
+                <input
+                  type="text"
+                  maxLength={2}
+                  value={travelerPassportIssuanceCountry}
+                  onChange={(event) =>
+                    setTravelerPassportIssuanceCountry(
+                      event.target.value.toUpperCase()
+                    )
+                  }
+                  aria-invalid={Boolean(passportIssuanceError)}
+                  className={inputClassName(
+                    passportIssuanceError,
+                    passportIssuanceFilled,
+                    "uppercase"
+                  )}
+                />
+                {passportIssuanceError && (
+                  <p className="text-[11px] text-rose-300">
+                    {passportIssuanceError}
+                  </p>
+                )}
+              </label>
+              <label className="space-y-1">
+                <span className="text-xs uppercase tracking-wide text-slate-500">
+                  Contact email
+                </span>
+                <input
+                  type="email"
+                  value={customerEmail}
+                  onChange={(event) => setCustomerEmail(event.target.value)}
+                  placeholder="alex@example.com"
+                  aria-invalid={Boolean(emailError)}
+                  className={inputClassName(emailError, emailFilled)}
+                />
+                {emailError && (
+                  <p className="text-[11px] text-rose-300">{emailError}</p>
+                )}
+              </label>
+            </div>
+
+            <label className="space-y-1">
+              <span className="text-xs uppercase tracking-wide text-slate-500">
+                Contact phone (E.164)
+              </span>
+              <input
+                type="tel"
+                value={customerPhone}
+                onChange={(event) => setCustomerPhone(event.target.value)}
+                placeholder="+61412345678"
+                aria-invalid={Boolean(phoneError)}
+                className={inputClassName(phoneError, phoneFilled)}
+              />
+              {phoneError && (
+                <p className="text-[11px] text-rose-300">{phoneError}</p>
+              )}
+            </label>
+          </section>
+
+          {showSummaryCard && (
+            <section className="mt-6 rounded-2xl border border-emerald-400/20 bg-slate-900/60 p-4 text-xs">
+              <h3 className="text-[11px] font-semibold uppercase tracking-wide text-emerald-300">
+                Review before checkout
+              </h3>
+              <dl className="mt-3 grid gap-3 text-slate-400 sm:grid-cols-2">
+                <div className="space-y-1 rounded-xl border border-slate-800/40 bg-slate-950/60 p-3">
+                  <dt className="text-[11px] font-semibold uppercase tracking-wide">
+                    Lead traveller
+                  </dt>
+                  <dd className="text-sm text-slate-100">
+                    {travelerFullName ? (
+                      travelerFullName
+                    ) : (
+                      <span className="text-amber-300">
+                        Add first and last name
+                      </span>
+                    )}
+                  </dd>
+                  <p className="text-[11px]">
+                    {summaryNationality ? (
+                      <>Nationality · {summaryNationality}</>
+                    ) : (
+                      <span className="text-amber-300">
+                        Nationality missing
+                      </span>
+                    )}
+                  </p>
+                </div>
+
+                <div className="space-y-1 rounded-xl border border-slate-800/40 bg-slate-950/60 p-3">
+                  <dt className="text-[11px] font-semibold uppercase tracking-wide">
+                    Date of birth
+                  </dt>
+                  <dd className="text-sm text-slate-100">
+                    {dateOfBirthFilled ? (
+                      travelerDateOfBirth
+                    ) : (
+                      <span className="text-amber-300">Add date of birth</span>
+                    )}
+                  </dd>
+                </div>
+
+                <div className="space-y-1 rounded-xl border border-slate-800/40 bg-slate-950/60 p-3">
+                  <dt className="text-[11px] font-semibold uppercase tracking-wide">
+                    Passport
+                  </dt>
+                  <dd className="text-sm text-slate-100">
+                    {passportNumberFilled ? (
+                      travelerPassportNumber
+                    ) : (
+                      <span className="text-amber-300">
+                        Add passport number
+                      </span>
+                    )}
+                  </dd>
+                  <p className="text-[11px]">
+                    {passportExpiryFilled ? (
+                      <>Expiry · {travelerPassportExpiry}</>
+                    ) : (
+                      <span className="text-amber-300">
+                        Expiry date missing
+                      </span>
+                    )}
+                  </p>
+                  <p className="text-[11px]">
+                    {summaryPassportCountry ? (
+                      <>Issued · {summaryPassportCountry}</>
+                    ) : (
+                      <span className="text-amber-300">
+                        Issuance country missing
+                      </span>
+                    )}
+                  </p>
+                </div>
+
+                <div className="space-y-1 rounded-xl border border-slate-800/40 bg-slate-950/60 p-3">
+                  <dt className="text-[11px] font-semibold uppercase tracking-wide">
+                    Contact
+                  </dt>
+                  <dd className="text-sm text-slate-100">
+                    {emailFilled ? (
+                      customerEmail
+                    ) : (
+                      <span className="text-amber-300">Add contact email</span>
+                    )}
+                  </dd>
+                  <p className="text-[11px]">
+                    {phoneFilled ? (
+                      customerPhone
+                    ) : (
+                      <span className="text-amber-300">
+                        Contact phone missing
+                      </span>
+                    )}
+                  </p>
+                </div>
+              </dl>
+            </section>
           )}
 
-          <p className="text-[11px] text-slate-500">
-            Apple Pay availability depends on your device and browser. Sandbox
-            checkout will simulate a confirmed reservation without charging a
-            card.
-          </p>
+          <div className="mt-6 space-y-3">
+            {showValidationErrors && hasValidationErrors && (
+              <div className="rounded-2xl border border-rose-500/40 bg-rose-900/40 p-4 text-xs text-rose-100">
+                {VALIDATION_ERROR_MESSAGE}
+              </div>
+            )}
 
-          {isStripeTestMode && (
-            <p className="text-[11px] text-emerald-500">
-              Stripe test mode: Apple Pay authorisations succeed with your real
-              wallet card but the transaction is recorded as a test payment
-              only, so no funds are captured.
+            {phase === "loading" && (
+              <div className="rounded-2xl border border-slate-800/40 bg-slate-900/50 p-4 text-sm text-slate-400">
+                Initializing secure payment session…
+              </div>
+            )}
+
+            {paymentRequest && clientSecret && (
+              <div className="relative">
+                <PaymentRequestButtonElement
+                  options={{
+                    paymentRequest,
+                    style: {
+                      paymentRequestButton: {
+                        theme: "dark",
+                        height: "48px",
+                        type: "buy",
+                      },
+                    },
+                  }}
+                  className="w-full overflow-hidden rounded-2xl"
+                />
+                {isProcessingCheckout && (
+                  <div className="absolute inset-0 flex items-center justify-center rounded-2xl bg-slate-950/70">
+                    <span className="flex items-center gap-2 text-sm text-emerald-200">
+                      <span className="h-4 w-4 animate-spin rounded-full border-2 border-emerald-300 border-t-transparent" />
+                      Authorising with Apple Pay…
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {(!paymentRequest || !intentAmount) && (
+              <button
+                type="button"
+                onClick={handleSandboxCheckout}
+                disabled={isProcessingCheckout}
+                className="w-full rounded-2xl border border-slate-700 bg-slate-900 px-4 py-3 text-sm font-semibold text-slate-200 transition hover:border-emerald-400 hover:text-emerald-200 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {isProcessingCheckout ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <span className="h-4 w-4 animate-spin rounded-full border-2 border-emerald-300 border-t-transparent" />
+                    Processing…
+                  </span>
+                ) : (
+                  "Complete booking (sandbox)"
+                )}
+              </button>
+            )}
+
+            {paymentError && paymentError !== VALIDATION_ERROR_MESSAGE && (
+              <div className="rounded-2xl border border-rose-500/40 bg-rose-900/40 p-4 text-xs text-rose-100">
+                {paymentError}
+              </div>
+            )}
+
+            {walletWarning && (
+              <div className="rounded-2xl border border-amber-400/40 bg-amber-500/10 p-4 text-xs text-amber-200">
+                {walletWarning}
+              </div>
+            )}
+
+            <p className="text-[11px] text-slate-500">
+              Apple Pay availability depends on your device and browser. Sandbox
+              checkout will simulate a confirmed reservation without charging a
+              card.
             </p>
-          )}
+
+            {isStripeTestMode && (
+              <p className="text-[11px] text-emerald-500">
+                Stripe test mode: Apple Pay authorisations succeed with your
+                real wallet card but the transaction is recorded as a test
+                payment only, so no funds are captured.
+              </p>
+            )}
+          </div>
         </div>
       </div>
     </div>

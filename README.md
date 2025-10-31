@@ -10,13 +10,16 @@ Travel-AI is a conversation-driven travel planning experience. Users describe th
 - OpenAI ChatGPT API for natural language understanding (via `openai`).
 - Amadeus sandbox integration for live flight and hotel availability (with graceful fallback data when credentials are absent).
 - Stripe Elements as the Apple Pay integration surface.
+- Prisma ORM with PostgreSQL for booking persistence.
 - Optional Resend integration for post-booking confirmation emails.
 
 ### Getting Started
 
 1. Install dependencies: `npm install`.
-2. Copy `.env.example` to `.env.local` and fill in API keys.
-3. Start the dev server: `npm run dev` (http://localhost:3000).
+2. Copy `.env.example` to `.env.local` (or create `.env.local`) and fill in API keys plus database connection details.
+3. Run database migrations: `npm run prisma:migrate` (requires a reachable Postgres instance defined in `DATABASE_URL`).
+4. Generate the Prisma client (optional if `migrate` already ran): `npm run prisma:generate`.
+5. Start the dev server: `npm run dev` (http://localhost:3000).
 
 ### Environment Variables
 
@@ -34,6 +37,7 @@ Travel-AI is a conversation-driven travel planning experience. Users describe th
 | `PAYMENTS_DEFAULT_CURRENCY`          | Optional | Fallback currency code used when itineraries omit pricing (defaults to `AUD`).                              |
 | `RESEND_API_KEY`                     | Optional | Sends confirmation emails after successful bookings when set.                                               |
 | `RESEND_FROM_EMAIL`                  | Optional | Custom “from” address for confirmation emails (defaults to `notifications@travel-ai.dev`).                  |
+| `DATABASE_URL`                       | Required | Postgres connection string used by Prisma to persist bookings and travellers.                               |
 
 ### Project Structure Highlights
 
@@ -44,7 +48,9 @@ Travel-AI is a conversation-driven travel planning experience. Users describe th
 - `src/lib/agents` – Flight/hotel/booking agents; flight and lodging agents now leverage Amadeus when credentials are provided.
 - `src/lib/services/amadeus.ts` – Handles OAuth, city resolution, and Amadeus API access for flights and hotels.
 - `src/app/api/search` – Coordinator API endpoint.
-- `src/app/api/book` – Stubbed booking endpoint.
+- `src/app/api/book` – Booking endpoint that triggers Amadeus, persists to Postgres, and dispatches confirmation email.
+- `src/lib/services/bookingPersistence.ts` – Maps booking payloads into Prisma writes.
+- `src/lib/services/prisma.ts` – Singleton Prisma client used across server modules.
 
 ### Roadmap
 

@@ -7,9 +7,13 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test:openai": "node scripts/openai-healthcheck.mjs"
+    "test:openai": "node scripts/openai-healthcheck.mjs",
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:generate": "prisma generate",
+    "prisma:studio": "prisma studio"
   },
   "dependencies": {
+    "@prisma/client": "^6.18.0",
     "@stripe/react-stripe-js": "^5.2.0",
     "@stripe/stripe-js": "^8.1.0",
     "next": "15.5.6",
@@ -21,6 +25,7 @@
     "zustand": "^5.0.8"
   },
   "devDependencies": {
+    "prisma": "^6.18.0",
     "@eslint/eslintrc": "^3",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",

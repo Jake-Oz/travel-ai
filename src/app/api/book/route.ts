@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 
 import { bookingAgentConfirm } from "@/lib/agents/bookingAgent";
 import { sendBookingConfirmationEmail } from "@/lib/services/mailer";
+import { persistBooking } from "@/lib/services/bookingPersistence";
+import type { BookingConfirmationPayload } from "@/lib/types/travel";
 
 interface BookingRequestBody {
   itineraryId?: string;
@@ -64,7 +66,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const receipt = await bookingAgentConfirm({
+    const payload: BookingConfirmationPayload = {
       itineraryId: body.itineraryId,
       itineraryHeadline: body.itineraryHeadline,
       chargedAmount: {
@@ -80,7 +82,15 @@ export async function POST(request: Request) {
       travelers: body.travelers,
       amadeusFlightOffer: body.amadeusFlightOffer,
       amadeusHotelOffer: body.amadeusHotelOffer,
-    });
+    };
+
+    const receipt = await bookingAgentConfirm(payload);
+
+    try {
+      await persistBooking({ payload, receipt });
+    } catch (error) {
+      console.error("Booking persistence failed", error);
+    }
 
     await sendBookingConfirmationEmail({ receipt });
 

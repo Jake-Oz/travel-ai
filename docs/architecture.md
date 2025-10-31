@@ -20,11 +20,11 @@ Travel-AI separates the conversational UI from domain-specific agents using a li
 ## API Endpoints
 
 - `POST /api/search` validates the request, executes the coordinator, and returns itinerary data plus an agent status trace.
-- `POST /api/book` is currently stubbed but wired to a booking agent for confirmation IDs. Replace once Stripe checkout and provider bookings are integrated.
+- `POST /api/book` invokes the booking agent, persists the resulting confirmation and travellers via Prisma, and dispatches a confirmation email.
 
 ## Next Steps
 
 - Add retries, caching, and circuit breaking around Amadeus calls; consider queuing for long-running workflows.
 - Introduce a queue or workflow engine if agent execution expands beyond simple parallel calls.
-- Add persistence for itineraries and payment intents to support post-payment booking reconciliation.
+- Extend persistence beyond bookings to cover itineraries and payment intents for reconciliation workflows.
 - Expand provider coverage (Duffel, Expedia, etc.) and introduce preference learning per traveller.

@@ -7,12 +7,14 @@ import {
   createAmadeusFlightOrder,
   isAmadeusConfigured,
   priceAmadeusFlightOffer,
+  AmadeusApiError,
 } from "@/lib/services/amadeus";
 
 export async function bookingAgentConfirm(
   payload: BookingConfirmationPayload
 ): Promise<BookingResponse> {
   const amadeusEnabled = isAmadeusConfigured();
+  let amadeusAvailable = amadeusEnabled;
   const chargedAmount = payload.chargedAmount;
   let flightOrderId: string | undefined;
   let hotelReservationId: string | undefined;
@@ -22,7 +24,7 @@ export async function bookingAgentConfirm(
   let amadeusFlightOrderError: string | undefined;
   let amadeusHotelBookingError: string | undefined;
   let status: BookingResponse["status"] = "confirmed";
-  if (amadeusEnabled && payload.amadeusFlightOffer) {
+  if (amadeusAvailable && payload.amadeusFlightOffer) {
     try {
       const pricing = await priceAmadeusFlightOffer(payload.amadeusFlightOffer);
       const pricedOffer = pricing?.data?.flightOffers?.[0];
@@ -42,16 +44,25 @@ export async function bookingAgentConfirm(
       flightOrderId = order.data.id;
       flightOrder = order;
     } catch (error) {
-      console.error("Amadeus flight booking failed", error);
-      amadeusFlightOrderError =
-        error instanceof Error
-          ? error.message
-          : "Amadeus flight booking failed";
+      const message = extractAmadeusMessage(
+        error,
+        "Amadeus flight booking failed"
+      );
+      console.error("Amadeus flight booking failed", {
+        error,
+        category:
+          error instanceof AmadeusApiError ? error.category : "unexpected",
+        status: error instanceof AmadeusApiError ? error.status : undefined,
+      });
+      amadeusFlightOrderError = message;
       status = "pending";
+      if (error instanceof AmadeusApiError && error.category === "auth") {
+        amadeusAvailable = false;
+      }
     }
   }
 
-  if (amadeusEnabled && payload.amadeusHotelOffer?.offerId) {
+  if (amadeusAvailable && payload.amadeusHotelOffer?.offerId) {
     try {
       const booking = await bookAmadeusHotelOffer({
         offerId: payload.amadeusHotelOffer.offerId,
@@ -66,16 +77,36 @@ export async function bookingAgentConfirm(
         booking.data.providerConfirmationId ?? booking.data.id;
       hotelBooking = booking;
     } catch (error) {
-      console.error("Amadeus hotel booking failed", error);
-      amadeusHotelBookingError =
-        error instanceof Error ? error.message : "Amadeus hotel booking failed";
+      const message = extractAmadeusMessage(
+        error,
+        "Amadeus hotel booking failed"
+      );
+      console.error("Amadeus hotel booking failed", {
+        error,
+        category:
+          error instanceof AmadeusApiError ? error.category : "unexpected",
+        status: error instanceof AmadeusApiError ? error.status : undefined,
+      });
+      amadeusHotelBookingError = message;
       status = "pending";
+      if (error instanceof AmadeusApiError && error.category === "auth") {
+        amadeusAvailable = false;
+      }
     }
   }
 
   const confirmationNumber = `CONF-${
     payload.itineraryId.split("-").pop()?.toUpperCase() ?? "ITIN"
   }-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
+
+  if (payload.paymentIntentId || flightOrderId || hotelReservationId) {
+    console.info("Booking reconciliation snapshot", {
+      confirmationNumber,
+      paymentIntentId: payload.paymentIntentId,
+      amadeusFlightOrderId: flightOrderId,
+      amadeusHotelReservationId: hotelReservationId,
+    });
+  }
 
   return {
     confirmationNumber,
@@ -98,4 +129,14 @@ export async function bookingAgentConfirm(
     amadeusFlightOrderError,
     amadeusHotelBookingError,
   };
+}
+
+function extractAmadeusMessage(error: unknown, fallback: string): string {
+  if (error instanceof AmadeusApiError) {
+    return error.userMessage;
+  }
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return fallback;
 }

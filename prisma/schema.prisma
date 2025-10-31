@@ -1,0 +1,100 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum BookingStatus {
+  CONFIRMED
+  PENDING
+}
+
+model Booking {
+  id                        String         @id @default(cuid())
+  confirmationNumber        String         @unique
+  status                    BookingStatus  @default(CONFIRMED)
+  itineraryId               String
+  itineraryHeadline         String
+  chargedAmount             Decimal        @db.Decimal(12, 2)
+  chargedCurrency           String         @db.VarChar(3)
+  paymentIntentId           String?        @db.VarChar(191)
+  customerName              String?        @db.VarChar(191)
+  customerEmail             String?        @db.VarChar(191)
+  customerPhone             String?        @db.VarChar(64)
+  flightAirline             String?        @db.VarChar(191)
+  flightNumber              String?        @db.VarChar(64)
+  flightDepartureAirport    String?        @db.VarChar(64)
+  flightArrivalAirport      String?        @db.VarChar(64)
+  flightDepartureTime       DateTime?      @db.Timestamptz(6)
+  flightArrivalTime         DateTime?      @db.Timestamptz(6)
+  stayName                  String?        @db.VarChar(191)
+  stayLocation              String?        @db.VarChar(191)
+  stayCheckIn               DateTime?      @db.Date
+  stayCheckOut              DateTime?      @db.Date
+  amadeusFlightOrderId      String?        @db.VarChar(191)
+  amadeusHotelReservationId String?        @db.VarChar(191)
+  amadeusFlightOrder        Json?
+  amadeusHotelBooking       Json?
+  amadeusFlightOrderError   String?
+  amadeusHotelBookingError  String?
+  requestPayload            Json?
+  createdAt                 DateTime       @default(now()) @db.Timestamptz(6)
+  updatedAt                 DateTime       @updatedAt @db.Timestamptz(6)
+
+  travelers Traveler[]
+  statusEvents BookingStatusEvent[]
+  retry        BookingRetry?
+
+  @@index([itineraryId])
+  @@index([paymentIntentId])
+  @@index([status, createdAt])
+}
+
+model Traveler {
+  id                       String    @id @default(cuid())
+  bookingId                String
+  firstName                String    @db.VarChar(191)
+  lastName                 String    @db.VarChar(191)
+  dateOfBirth              DateTime? @db.Date
+  email                    String?   @db.VarChar(191)
+  phoneCountryCode         String?   @db.VarChar(8)
+  phoneNumber              String?   @db.VarChar(32)
+  nationality              String?   @db.VarChar(2)
+  passportNumber           String?   @db.VarChar(64)
+  passportExpiry           DateTime? @db.Date
+  passportIssuanceCountry  String?   @db.VarChar(2)
+  createdAt                DateTime  @default(now()) @db.Timestamptz(6)
+
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@index([bookingId])
+}
+
+model BookingStatusEvent {
+  id         String        @id @default(cuid())
+  bookingId  String
+  fromStatus BookingStatus?
+  toStatus   BookingStatus
+  reason     String?
+  createdAt  DateTime      @default(now()) @db.Timestamptz(6)
+
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@index([bookingId])
+  @@index([createdAt])
+}
+
+model BookingRetry {
+  id         String   @id @default(cuid())
+  bookingId  String   @unique
+  attempts   Int      @default(0)
+  nextRunAt  DateTime @db.Timestamptz(6)
+  lastError  String?
+  createdAt  DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt  DateTime @updatedAt @db.Timestamptz(6)
+
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+}
