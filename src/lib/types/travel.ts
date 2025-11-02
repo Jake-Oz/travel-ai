@@ -100,6 +100,17 @@ export interface ItineraryPackage {
     amount: number;
     currency: string;
   };
+  priceBreakdown: {
+    flight: {
+      amount: number;
+      currency: string;
+    };
+    lodging: {
+      amount: number;
+      currency: string;
+    };
+    currencyConsistent: boolean;
+  };
   coordinatorScore?: number;
   tags?: string[];
 }
@@ -137,13 +148,23 @@ export interface BookingFlightSummary {
 export interface BookingStaySummary {
   name: string;
   location?: string;
+  addressLine?: string;
   checkIn?: string;
   checkOut?: string;
+  nightlyRate?: {
+    amount: number;
+    currency: string;
+  };
+  totalPrice?: {
+    amount: number;
+    currency: string;
+  };
 }
 
 export interface BookingTraveler {
   firstName: string;
   lastName: string;
+  travelerType?: "ADULT" | "CHILD" | "INFANT" | "INFANT_WITH_SEAT";
   dateOfBirth?: string;
   email?: string;
   phoneCountryCode?: string;

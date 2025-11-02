@@ -84,6 +84,43 @@ export async function POST(request: Request) {
       amadeusHotelOffer: body.amadeusHotelOffer,
     };
 
+    if (!payload.travelers?.length) {
+      return NextResponse.json(
+        { error: "Traveller details are required to complete booking." },
+        { status: 400 }
+      );
+    }
+
+    const travelerIssue = payload.travelers
+      .map((traveler, index) => {
+        const missing: string[] = [];
+        if (!traveler.firstName?.trim()) missing.push("firstName");
+        if (!traveler.lastName?.trim()) missing.push("lastName");
+        if (!traveler.travelerType) missing.push("travelerType");
+        if (!traveler.dateOfBirth) missing.push("dateOfBirth");
+        if (!traveler.email) missing.push("email");
+        if (!traveler.phoneCountryCode || !traveler.phoneNumber)
+          missing.push("phone");
+        if (!traveler.nationality) missing.push("nationality");
+        if (!traveler.passportNumber) missing.push("passportNumber");
+        if (!traveler.passportExpiry) missing.push("passportExpiry");
+        if (!traveler.passportIssuanceCountry)
+          missing.push("passportIssuanceCountry");
+        return missing.length
+          ? { index: index + 1, missing }
+          : null;
+      })
+      .find((issue): issue is { index: number; missing: string[] } => issue !== null);
+
+    if (travelerIssue) {
+      return NextResponse.json(
+        {
+          error: `Traveller ${travelerIssue.index} is missing required fields: ${travelerIssue.missing.join(", ")}`,
+        },
+        { status: 400 }
+      );
+    }
+
     const receipt = await bookingAgentConfirm(payload);
 
     try {

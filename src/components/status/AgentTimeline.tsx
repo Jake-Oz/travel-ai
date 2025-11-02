@@ -65,6 +65,7 @@ export function AgentTimeline({ trace, phase }: AgentTimelineProps) {
               )}`}
             >
               {item.agent}
+
               <span className="text-[10px] text-slate-950/70">
                 {statusLabel(item.status)}
               </span>

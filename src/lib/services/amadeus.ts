@@ -18,6 +18,24 @@ const AMADEUS_BASE_URL =
   process.env.AMADEUS_BASE_URL || DEFAULT_AMADEUS_BASE_URL;
 const AMADEUS_CLIENT_ID = process.env.AMADEUS_CLIENT_ID;
 const AMADEUS_CLIENT_SECRET = process.env.AMADEUS_CLIENT_SECRET;
+const DEFAULT_REQUEST_CURRENCY = (
+  process.env.PAYMENTS_DEFAULT_CURRENCY ?? "AUD"
+).toUpperCase();
+
+function normalizeCurrency(value?: string | null): string | undefined {
+  if (!value) {
+    return undefined;
+  }
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+  return trimmed.toUpperCase();
+}
+
+function resolvePreferredCurrency(query: StructuredTravelQuery): string {
+  return normalizeCurrency(query.budget?.currency) ?? DEFAULT_REQUEST_CURRENCY;
+}
 
 interface AmadeusAccessTokenResponse {
   access_token: string;
@@ -587,6 +605,17 @@ function buildFlightOffer(
     .map((itinerary) => minutesFromIsoDuration(itinerary.duration))
     .reduce((total, minutes) => total + minutes, 0);
 
+  const preferredCurrency = resolvePreferredCurrency(query);
+  const offerCurrency = normalizeCurrency(offer.price?.currency);
+  if (offerCurrency && offerCurrency !== preferredCurrency) {
+    console.warn("Amadeus flight offer returned unexpected currency", {
+      offerId: offer.id,
+      requested: preferredCurrency,
+      returned: offerCurrency,
+    });
+  }
+  const resolvedCurrency = offerCurrency ?? preferredCurrency;
+
   return {
     id: offer.id,
     airline: airlineName,
@@ -598,7 +627,7 @@ function buildFlightOffer(
     baggageAllowance: baggageAllowanceText(baggage),
     price: {
       amount: Number.parseFloat(offer.price.total),
-      currency: offer.price.currency,
+      currency: resolvedCurrency,
     },
     bookingUrl: undefined,
     amadeus: {
@@ -614,6 +643,7 @@ export async function searchAmadeusFlights(
   const originCode = await resolveCityCode(query.originCity);
   const destinationCode = await resolveCityCode(query.destinationCity);
   const safeDeparture = ensureFutureDate(query.departureDate, 30);
+  const preferredCurrency = resolvePreferredCurrency(query);
 
   let safeReturn: string | undefined;
   if (query.returnDate) {
@@ -634,7 +664,7 @@ export async function searchAmadeusFlights(
       adults: Math.min(query.passengers, 9),
       travelClass: mapTravelClass(query.travelClass),
       returnDate: safeReturn,
-      currencyCode: query.budget?.currency,
+      currencyCode: preferredCurrency,
       max: maxResults,
     }
   );
@@ -687,6 +717,7 @@ export async function searchAmadeusHotels(
 ): Promise<LodgingOffer[]> {
   const destinationCode = await resolveCityCode(query.destinationCity);
   const cityCode = destinationCode.slice(0, 3).toUpperCase();
+  const preferredCurrency = resolvePreferredCurrency(query);
 
   const checkIn = ensureFutureDate(query.departureDate, 30);
   const preliminaryCheckOut = query.returnDate
@@ -717,7 +748,7 @@ export async function searchAmadeusHotels(
         checkOutDate: checkOut,
         adults: Math.min(query.passengers, 9),
         roomQuantity: 1,
-        currency: query.budget?.currency,
+        currency: preferredCurrency,
         bestRateOnly: "true",
       }
     );
@@ -738,11 +769,16 @@ export async function searchAmadeusHotels(
     const totalAmount = offer?.price?.total
       ? Number.parseFloat(offer.price.total)
       : undefined;
-    const currency = (
-      offer?.price?.currency ||
-      query.budget?.currency ||
-      "AUD"
-    ).toUpperCase();
+    const offerCurrency = normalizeCurrency(offer?.price?.currency);
+    if (offerCurrency && offerCurrency !== preferredCurrency) {
+      console.warn("Amadeus hotel offer returned unexpected currency", {
+        hotelName: result.hotel.name,
+        offerId: offer?.id,
+        requested: preferredCurrency,
+        returned: offerCurrency,
+      });
+    }
+    const currency = offerCurrency ?? preferredCurrency;
     const stayNights =
       query.nights ??
       Math.max(
@@ -807,6 +843,7 @@ const FALLBACK_TRAVELER: Required<BookingTraveler> = {
   firstName: "Test",
   lastName: "Passenger",
   dateOfBirth: "1990-01-01",
+  travelerType: "ADULT",
   email: "traveler@example.com",
   phoneCountryCode: "61",
   phoneNumber: "412345678",

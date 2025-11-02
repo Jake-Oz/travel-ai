@@ -13,6 +13,23 @@ import { structureQueryWithOpenAI } from "@/lib/services/openai";
 import { flightAgentSearch } from "@/lib/agents/flightAgent";
 import { hotelAgentSearch } from "@/lib/agents/hotelAgent";
 
+const DEFAULT_DISPLAY_CURRENCY = (
+  process.env.PAYMENTS_DEFAULT_CURRENCY ?? "AUD"
+).toUpperCase();
+
+function normalizeCurrency(value?: string | null): string | undefined {
+  if (!value) {
+    return undefined;
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+
+  return trimmed.toUpperCase();
+}
+
 function updateTrace(
   trace: AgentTrace[],
   agent: AgentTrace["agent"],
@@ -38,8 +55,54 @@ function buildItineraries(
 
   for (const flight of flights) {
     for (const lodging of hotels) {
-      const totalAmount = flight.price.amount + lodging.totalPrice.amount;
-      const currency = flight.price.currency;
+      if (
+        typeof flight.price?.amount !== "number" ||
+        Number.isNaN(flight.price.amount) ||
+        typeof lodging.totalPrice?.amount !== "number" ||
+        Number.isNaN(lodging.totalPrice.amount)
+      ) {
+        console.warn("Skipping itinerary due to invalid pricing", {
+          flightId: flight.id,
+          lodgingId: lodging.id,
+          flightAmount: flight.price?.amount,
+          lodgingAmount: lodging.totalPrice?.amount,
+        });
+        continue;
+      }
+
+      const requestedCurrency = normalizeCurrency(query.budget?.currency);
+      const flightCurrency = normalizeCurrency(flight.price.currency);
+      const lodgingCurrency = normalizeCurrency(lodging.totalPrice.currency);
+      const displayCurrency =
+        requestedCurrency ??
+        flightCurrency ??
+        lodgingCurrency ??
+        DEFAULT_DISPLAY_CURRENCY;
+
+      const currencyConsistent =
+        (!flightCurrency || flightCurrency === displayCurrency) &&
+        (!lodgingCurrency || lodgingCurrency === displayCurrency);
+
+      if (
+        !currencyConsistent &&
+        flightCurrency &&
+        lodgingCurrency &&
+        flightCurrency !== lodgingCurrency
+      ) {
+        console.warn("Itinerary currency mismatch detected", {
+          flightId: flight.id,
+          lodgingId: lodging.id,
+          flightCurrency,
+          lodgingCurrency,
+          displayCurrency,
+        });
+      }
+
+      const totalAmount = Number.parseFloat(
+        (flight.price.amount + lodging.totalPrice.amount).toFixed(2)
+      );
+      const currency = displayCurrency;
+
       combinations.push({
         id: `itinerary-${counter}`,
         headline: `${query.destinationCity} escape`,
@@ -47,12 +110,26 @@ function buildItineraries(
         flight,
         lodging,
         totalPrice: { amount: totalAmount, currency },
+        priceBreakdown: {
+          flight: {
+            amount: Number.parseFloat(flight.price.amount.toFixed(2)),
+            currency: flightCurrency ?? displayCurrency,
+          },
+          lodging: {
+            amount: Number.parseFloat(
+              lodging.totalPrice.amount.toFixed(2)
+            ),
+            currency: lodgingCurrency ?? displayCurrency,
+          },
+          currencyConsistent,
+        },
         coordinatorScore: Math.round(Math.random() * 100) / 100,
         tags: [
           flight.stops === 0 ? "Nonstop" : "Layover",
           `${query.travelClass.toUpperCase()}`,
           `${lodging.stars ?? 4}-star stay`,
           `${currency} ${totalAmount.toFixed(0)}`,
+          ...(!currencyConsistent ? ["Mixed currency"] : []),
         ],
       });
       counter += 1;

@@ -11,7 +11,7 @@ interface ItineraryCardProps {
 }
 
 export function ItineraryCard({ itinerary, onSelect }: ItineraryCardProps) {
-  const { flight, lodging, totalPrice } = itinerary;
+  const { flight, lodging, totalPrice, priceBreakdown } = itinerary;
   const firstLeg = flight.legs[0];
   const lastLeg = flight.legs[flight.legs.length - 1];
 
@@ -31,6 +31,24 @@ export function ItineraryCard({ itinerary, onSelect }: ItineraryCardProps) {
           <span className="text-lg font-semibold text-emerald-200">
             {formatCurrency(totalPrice.amount, totalPrice.currency)}
           </span>
+          {priceBreakdown && (
+            <span className="mt-1 block text-[11px] text-emerald-200/80">
+              Flight {formatCurrency(
+                priceBreakdown.flight.amount,
+                priceBreakdown.flight.currency
+              )}
+              {" "}· Stay {formatCurrency(
+                priceBreakdown.lodging.amount,
+                priceBreakdown.lodging.currency
+              )}
+            </span>
+          )}
+          {priceBreakdown && !priceBreakdown.currencyConsistent && (
+            <span className="mt-1 block text-[11px] text-amber-300/80">
+              Currency mismatch between flight and stay—double check before
+              booking.
+            </span>
+          )}
         </div>
       </header>
 

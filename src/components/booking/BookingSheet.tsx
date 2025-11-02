@@ -40,6 +40,95 @@ const zeroDecimalCurrencies = new Set([
 const VALIDATION_ERROR_MESSAGE =
   "Complete the highlighted traveller and contact details before continuing.";
 
+function calculateAgeInYears(date: Date | null): number | undefined {
+  if (!date) {
+    return undefined;
+  }
+
+  const now = new Date();
+  let age = now.getUTCFullYear() - date.getUTCFullYear();
+  const monthDifference = now.getUTCMonth() - date.getUTCMonth();
+  const dayDifference = now.getUTCDate() - date.getUTCDate();
+
+  if (monthDifference < 0 || (monthDifference === 0 && dayDifference < 0)) {
+    age -= 1;
+  }
+
+  return age;
+}
+
+function determineTravelerType(
+  dateOfBirth?: string | null
+): "ADULT" | "CHILD" | "INFANT" | "INFANT_WITH_SEAT" {
+  const parsed = dateOfBirth ? parseISODate(dateOfBirth) : null;
+  const age = calculateAgeInYears(parsed);
+
+  if (age === undefined) {
+    return "ADULT";
+  }
+
+  if (age < 2) {
+    return "INFANT";
+  }
+
+  if (age < 12) {
+    return "CHILD";
+  }
+
+  return "ADULT";
+}
+
+function ensureTravelersComplete(
+  travelers?: BookingConfirmationPayload["travelers"]
+): void {
+  if (!travelers || travelers.length === 0) {
+    throw new Error("At least one traveller is required to confirm booking.");
+  }
+
+  travelers.forEach((traveler, index) => {
+    const missing: string[] = [];
+
+    if (!traveler.firstName?.trim()) {
+      missing.push("firstName");
+    }
+    if (!traveler.lastName?.trim()) {
+      missing.push("lastName");
+    }
+    if (!traveler.travelerType) {
+      missing.push("travelerType");
+    }
+    if (!traveler.dateOfBirth) {
+      missing.push("dateOfBirth");
+    }
+    if (!traveler.email) {
+      missing.push("email");
+    }
+    if (!traveler.phoneCountryCode || !traveler.phoneNumber) {
+      missing.push("phone");
+    }
+    if (!traveler.nationality) {
+      missing.push("nationality");
+    }
+    if (!traveler.passportNumber) {
+      missing.push("passportNumber");
+    }
+    if (!traveler.passportExpiry) {
+      missing.push("passportExpiry");
+    }
+    if (!traveler.passportIssuanceCountry) {
+      missing.push("passportIssuanceCountry");
+    }
+
+    if (missing.length) {
+      throw new Error(
+        `Traveller ${index + 1} is missing required details: ${missing.join(
+          ", "
+        )}`
+      );
+    }
+  });
+}
+
 function toMajorUnits(amount: number, currency: string): number {
   const normalizedCurrency = currency.toUpperCase();
   const divisor = zeroDecimalCurrencies.has(normalizedCurrency) ? 1 : 100;
@@ -153,17 +242,45 @@ interface BookingSheetProps {
 
 type BookingPhase = "loading" | "ready" | "processing" | "completed" | "error";
 
+type TravelerFormValues = {
+  id: string;
+  firstName: string;
+  lastName: string;
+  dateOfBirth: string;
+  nationality: string;
+  passportNumber: string;
+  passportExpiry: string;
+  passportIssuanceCountry: string;
+};
+
+type TravelerValidationErrors = Partial<
+  Record<keyof Omit<TravelerFormValues, "id">, string>
+>;
+
 type ValidationErrors = {
-  travelerFirstName?: string;
-  travelerLastName?: string;
-  travelerDateOfBirth?: string;
-  travelerNationality?: string;
-  travelerPassportNumber?: string;
-  travelerPassportExpiry?: string;
-  travelerPassportIssuanceCountry?: string;
+  travelers: TravelerValidationErrors[];
   customerEmail?: string;
   customerPhone?: string;
 };
+
+function createTravelerForm(overrides?: Partial<TravelerFormValues>) {
+  const id =
+    typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID()
+      : Math.random().toString(36).slice(2, 10);
+
+  return {
+    id,
+    firstName: "",
+    lastName: "",
+    dateOfBirth: "",
+    nationality: "AU",
+    passportNumber: "",
+    passportExpiry: "",
+    passportIssuanceCountry: "AU",
+    ...overrides,
+  } satisfies TravelerFormValues;
+}
 
 export function BookingSheet({
   itinerary,
@@ -181,18 +298,33 @@ export function BookingSheet({
   const [intentAmount, setIntentAmount] = useState<number | undefined>();
   const [walletWarning, setWalletWarning] = useState<string | undefined>();
   const [showValidationErrors, setShowValidationErrors] = useState(false);
-  const [travelerFirstName, setTravelerFirstName] = useState<string>("");
-  const [travelerLastName, setTravelerLastName] = useState<string>("");
-  const [travelerDateOfBirth, setTravelerDateOfBirth] = useState<string>("");
-  const [travelerNationality, setTravelerNationality] = useState<string>("AU");
-  const [travelerPassportNumber, setTravelerPassportNumber] =
-    useState<string>("");
-  const [travelerPassportExpiry, setTravelerPassportExpiry] =
-    useState<string>("");
-  const [travelerPassportIssuanceCountry, setTravelerPassportIssuanceCountry] =
-    useState<string>("AU");
+  const [travelers, setTravelers] = useState<TravelerFormValues[]>([
+    createTravelerForm(),
+  ]);
   const [customerEmail, setCustomerEmail] = useState<string>("");
   const [customerPhone, setCustomerPhone] = useState<string>("");
+
+  const updateTraveler = useCallback(
+    (index: number, patch: Partial<TravelerFormValues>) => {
+      setTravelers((prev) => {
+        const next = [...prev];
+        next[index] = { ...next[index], ...patch };
+        return next;
+      });
+    },
+    []
+  );
+
+  const addTraveler = useCallback(() => {
+    setTravelers((prev) => [...prev, createTravelerForm()]);
+  }, []);
+
+  const removeTraveler = useCallback((index: number) => {
+    setTravelers((prev) =>
+      prev.length <= 1 ? prev : prev.filter((_, idx) => idx !== index)
+    );
+  }, []);
+
   const applyPaymentContact = useCallback(
     ({
       name,
@@ -211,178 +343,208 @@ export function BookingSheet({
       }
       if (name) {
         const { firstName, lastName } = splitFullName(name);
-        if (firstName && !travelerFirstName) {
-          setTravelerFirstName(firstName);
-        }
-        if (lastName && !travelerLastName) {
-          setTravelerLastName(lastName);
+        if (firstName || lastName) {
+          setTravelers((prev) => {
+            if (!prev.length) {
+              return prev;
+            }
+            const next = [...prev];
+            const lead = { ...next[0] };
+            if (firstName && !lead.firstName) {
+              lead.firstName = firstName;
+            }
+            if (lastName && !lead.lastName) {
+              lead.lastName = lastName;
+            }
+            next[0] = lead;
+            return next;
+          });
         }
       }
     },
-    [customerEmail, customerPhone, travelerFirstName, travelerLastName]
+    [customerEmail, customerPhone]
   );
+  const priceBreakdown = itinerary.priceBreakdown;
   const currency = (itinerary.totalPrice.currency ?? "AUD").toUpperCase();
+  const currencyWarning =
+    priceBreakdown?.currencyConsistent === false
+      ? `Flight is priced in ${priceBreakdown.flight.currency} and stay in ${priceBreakdown.lodging.currency}. Stripe will charge ${currency}.`
+      : undefined;
   const stripeMode = (
     process.env.NEXT_PUBLIC_STRIPE_MODE ?? "test"
   ).toLowerCase();
   const isStripeTestMode = stripeMode === "test";
 
   const validationErrors = useMemo<ValidationErrors>(() => {
-    const errors: ValidationErrors = {};
+    const travelerErrors = travelers.map((traveler) => {
+      const errors: TravelerValidationErrors = {};
 
-    const firstName = travelerFirstName.trim();
-    if (!firstName) {
-      errors.travelerFirstName = "First name is required.";
-    }
-
-    const lastName = travelerLastName.trim();
-    if (!lastName) {
-      errors.travelerLastName = "Last name is required.";
-    }
-
-    const dobRaw = travelerDateOfBirth.trim();
-    if (!dobRaw) {
-      errors.travelerDateOfBirth = "Date of birth is required.";
-    } else {
-      const parsed = parseISODate(dobRaw);
-      if (!parsed) {
-        errors.travelerDateOfBirth = "Use the format YYYY-MM-DD.";
-      } else if (!isBeforeToday(parsed)) {
-        errors.travelerDateOfBirth = "Date of birth must be in the past.";
+      const firstName = traveler.firstName.trim();
+      if (!firstName) {
+        errors.firstName = "First name is required.";
       }
-    }
 
-    const nationality = travelerNationality.trim();
-    if (!/^[A-Z]{2}$/.test(nationality)) {
-      errors.travelerNationality = "Use a 2-letter ISO country code.";
-    }
-
-    const passportNumber = travelerPassportNumber.trim();
-    if (!passportNumber) {
-      errors.travelerPassportNumber = "Passport number is required.";
-    } else if (passportNumber.length < 5) {
-      errors.travelerPassportNumber = "Passport number looks too short.";
-    }
-
-    const passportExpiryRaw = travelerPassportExpiry.trim();
-    if (!passportExpiryRaw) {
-      errors.travelerPassportExpiry = "Passport expiry is required.";
-    } else {
-      const parsed = parseISODate(passportExpiryRaw);
-      if (!parsed) {
-        errors.travelerPassportExpiry = "Use the format YYYY-MM-DD.";
-      } else if (!isAfterToday(parsed)) {
-        errors.travelerPassportExpiry =
-          "Passport must be valid for future travel.";
+      const lastName = traveler.lastName.trim();
+      if (!lastName) {
+        errors.lastName = "Last name is required.";
       }
-    }
 
-    const issuance = travelerPassportIssuanceCountry.trim();
-    if (!/^[A-Z]{2}$/.test(issuance)) {
-      errors.travelerPassportIssuanceCountry =
-        "Use a 2-letter ISO country code.";
-    }
+      const dobRaw = traveler.dateOfBirth.trim();
+      if (!dobRaw) {
+        errors.dateOfBirth = "Date of birth is required.";
+      } else {
+        const parsed = parseISODate(dobRaw);
+        if (!parsed) {
+          errors.dateOfBirth = "Use the format YYYY-MM-DD.";
+        } else if (!isBeforeToday(parsed)) {
+          errors.dateOfBirth = "Date of birth must be in the past.";
+        }
+      }
+
+      const nationality = traveler.nationality.trim().toUpperCase();
+      if (!/^[A-Z]{2}$/.test(nationality)) {
+        errors.nationality = "Use a 2-letter ISO country code.";
+      }
+
+      const passportNumber = traveler.passportNumber.trim();
+      if (!passportNumber) {
+        errors.passportNumber = "Passport number is required.";
+      } else if (passportNumber.length < 5) {
+        errors.passportNumber = "Passport number looks too short.";
+      }
+
+      const passportExpiryRaw = traveler.passportExpiry.trim();
+      if (!passportExpiryRaw) {
+        errors.passportExpiry = "Passport expiry is required.";
+      } else {
+        const parsed = parseISODate(passportExpiryRaw);
+        if (!parsed) {
+          errors.passportExpiry = "Use the format YYYY-MM-DD.";
+        } else if (!isAfterToday(parsed)) {
+          errors.passportExpiry = "Passport must be valid for future travel.";
+        }
+      }
+
+      const issuance = traveler.passportIssuanceCountry.trim().toUpperCase();
+      if (!/^[A-Z]{2}$/.test(issuance)) {
+        errors.passportIssuanceCountry = "Use a 2-letter ISO country code.";
+      }
+
+      return errors;
+    });
 
     const email = customerEmail.trim();
+    const phone = customerPhone.trim();
+
+    let emailError: string | undefined;
     if (!email) {
-      errors.customerEmail = "Contact email is required.";
+      emailError = "Contact email is required.";
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      errors.customerEmail = "Enter a valid email address.";
+      emailError = "Enter a valid email address.";
     }
 
-    const phone = customerPhone.trim();
+    let phoneError: string | undefined;
     if (!phone) {
-      errors.customerPhone = "Contact phone is required.";
+      phoneError = "Contact phone is required.";
     } else if (!/^\+[1-9][0-9]{6,14}$/.test(phone)) {
-      errors.customerPhone = "Use international format like +61412345678.";
+      phoneError = "Use international format like +61412345678.";
     } else {
       const components = derivePhoneComponents(phone);
       if (!components.countryCode || !components.number) {
-        errors.customerPhone = "Unable to read that phone number.";
+        phoneError = "Unable to read that phone number.";
       }
     }
 
-    return errors;
-  }, [
-    customerEmail,
-    customerPhone,
-    travelerDateOfBirth,
-    travelerFirstName,
-    travelerLastName,
-    travelerNationality,
-    travelerPassportExpiry,
-    travelerPassportIssuanceCountry,
-    travelerPassportNumber,
-  ]);
+    return {
+      travelers: travelerErrors,
+      customerEmail: emailError,
+      customerPhone: phoneError,
+    };
+  }, [customerEmail, customerPhone, travelers]);
 
-  const hasValidationErrors = useMemo(
-    () => Object.values(validationErrors).some(Boolean),
-    [validationErrors]
-  );
+  const hasValidationErrors = useMemo(() => {
+    const travelerIssues = validationErrors.travelers.some((errors) =>
+      Object.values(errors).some(Boolean)
+    );
+    return (
+      travelerIssues ||
+      Boolean(validationErrors.customerEmail) ||
+      Boolean(validationErrors.customerPhone)
+    );
+  }, [validationErrors]);
 
-  const firstNameError =
-    showValidationErrors || travelerFirstName.trim().length > 0
-      ? validationErrors.travelerFirstName
-      : undefined;
-  const lastNameError =
-    showValidationErrors || travelerLastName.trim().length > 0
-      ? validationErrors.travelerLastName
-      : undefined;
-  const dateOfBirthError =
-    showValidationErrors || travelerDateOfBirth.trim().length > 0
-      ? validationErrors.travelerDateOfBirth
-      : undefined;
-  const nationalityError =
-    showValidationErrors || travelerNationality.trim().length > 0
-      ? validationErrors.travelerNationality
-      : undefined;
-  const passportNumberError =
-    showValidationErrors || travelerPassportNumber.trim().length > 0
-      ? validationErrors.travelerPassportNumber
-      : undefined;
-  const passportExpiryError =
-    showValidationErrors || travelerPassportExpiry.trim().length > 0
-      ? validationErrors.travelerPassportExpiry
-      : undefined;
-  const passportIssuanceError =
-    showValidationErrors || travelerPassportIssuanceCountry.trim().length > 0
-      ? validationErrors.travelerPassportIssuanceCountry
-      : undefined;
+  const leadTraveler = travelers[0];
+  const leadFirstName = leadTraveler?.firstName ?? "";
+  const leadLastName = leadTraveler?.lastName ?? "";
+  const leadDateOfBirth = leadTraveler?.dateOfBirth ?? "";
+  const leadNationality = leadTraveler?.nationality ?? "";
+  const leadPassportNumber = leadTraveler?.passportNumber ?? "";
+  const leadPassportExpiry = leadTraveler?.passportExpiry ?? "";
+  const leadPassportIssuance = leadTraveler?.passportIssuanceCountry ?? "";
+
+  const travelerFullName = [leadFirstName.trim(), leadLastName.trim()]
+    .filter(Boolean)
+    .join(" ");
+  const summaryNationality = leadNationality.trim().toUpperCase() || "";
+  const summaryPassportCountry =
+    leadPassportIssuance.trim().toUpperCase() || "";
+  const dateOfBirthFilled = leadDateOfBirth.trim().length > 0;
+  const passportNumberFilled = leadPassportNumber.trim().length > 0;
+  const passportExpiryFilled = leadPassportExpiry.trim().length > 0;
+
+  const emailFilled = customerEmail.trim().length > 0;
+  const phoneFilled = customerPhone.trim().length > 0;
+
   const emailError =
-    showValidationErrors || customerEmail.trim().length > 0
+    showValidationErrors || emailFilled
       ? validationErrors.customerEmail
       : undefined;
   const phoneError =
-    showValidationErrors || customerPhone.trim().length > 0
+    showValidationErrors || phoneFilled
       ? validationErrors.customerPhone
       : undefined;
 
-  const firstNameFilled = travelerFirstName.trim().length > 0;
-  const lastNameFilled = travelerLastName.trim().length > 0;
-  const dateOfBirthFilled = travelerDateOfBirth.trim().length > 0;
-  const nationalityFilled = travelerNationality.trim().length > 0;
-  const passportNumberFilled = travelerPassportNumber.trim().length > 0;
-  const passportExpiryFilled = travelerPassportExpiry.trim().length > 0;
-  const passportIssuanceFilled =
-    travelerPassportIssuanceCountry.trim().length > 0;
-  const emailFilled = customerEmail.trim().length > 0;
-  const phoneFilled = customerPhone.trim().length > 0;
-  const isProcessingCheckout = phase === "processing";
+  const travelerSummaryEntries = travelers.map((traveler, index) => {
+    const firstName = traveler.firstName.trim();
+    const lastName = traveler.lastName.trim();
+    const name = [firstName, lastName].filter(Boolean).join(" ");
+    const dateOfBirth = traveler.dateOfBirth.trim();
+    const nationality = traveler.nationality.trim().toUpperCase();
+    const passportNumber = traveler.passportNumber.trim();
+    const passportExpiry = traveler.passportExpiry.trim();
+    const passportIssuance = traveler.passportIssuanceCountry
+      .trim()
+      .toUpperCase();
+    const hasAnyField = [
+      firstName,
+      lastName,
+      dateOfBirth,
+      nationality,
+      passportNumber,
+      passportExpiry,
+      passportIssuance,
+    ].some((value) => value.length > 0);
 
-  const travelerFullName = [travelerFirstName.trim(), travelerLastName.trim()]
-    .filter(Boolean)
-    .join(" ");
-  const summaryNationality = travelerNationality.trim().toUpperCase() || "";
-  const summaryPassportCountry =
-    travelerPassportIssuanceCountry.trim().toUpperCase() || "";
-  const showSummaryCard =
-    Boolean(travelerFullName) ||
-    dateOfBirthFilled ||
-    nationalityFilled ||
-    passportNumberFilled ||
-    passportExpiryFilled ||
-    emailFilled ||
-    phoneFilled;
+    return {
+      index,
+      role: index === 0 ? "Lead traveller" : `Traveller ${index + 1}`,
+      name,
+      dateOfBirth,
+      nationality,
+      passportNumber,
+      passportExpiry,
+      passportIssuance,
+      hasAnyField,
+    };
+  });
+
+  const anyTravelerFieldFilled = travelerSummaryEntries.some(
+    (entry) => entry.hasAnyField
+  );
+
+  const showSummaryCard = anyTravelerFieldFilled || emailFilled || phoneFilled;
+
+  const isProcessingCheckout = phase === "processing";
 
   useEffect(() => {
     if (!showValidationErrors) return;
@@ -434,31 +596,36 @@ export function BookingSheet({
     ): BookingConfirmationPayload => {
       const firstLeg = itinerary.flight.legs[0];
       const lastLeg = itinerary.flight.legs[itinerary.flight.legs.length - 1];
-      const trimmedFirstName = travelerFirstName.trim();
-      const trimmedLastName = travelerLastName.trim();
       const trimmedEmail = customerEmail.trim();
       const trimmedPhone = customerPhone.trim();
-      const composedPhone = trimmedPhone;
-      const phoneComponents = derivePhoneComponents(composedPhone);
+      const phoneComponents = derivePhoneComponents(trimmedPhone);
 
-      const travelers =
-        trimmedFirstName && trimmedLastName
-          ? [
-              {
-                firstName: trimmedFirstName,
-                lastName: trimmedLastName,
-                dateOfBirth: travelerDateOfBirth || undefined,
-                email: trimmedEmail || undefined,
-                phoneCountryCode: phoneComponents.countryCode,
-                phoneNumber: phoneComponents.number,
-                nationality: travelerNationality.trim() || undefined,
-                passportNumber: travelerPassportNumber.trim() || undefined,
-                passportExpiry: travelerPassportExpiry || undefined,
-                passportIssuanceCountry:
-                  travelerPassportIssuanceCountry.trim() || undefined,
-              },
-            ]
-          : undefined;
+      const travelerPayload = travelers.map((traveler) => {
+        const firstName = traveler.firstName.trim();
+        const lastName = traveler.lastName.trim();
+        const nationality = traveler.nationality.trim().toUpperCase();
+        const passportCountry = traveler.passportIssuanceCountry
+          .trim()
+          .toUpperCase();
+
+        return {
+          firstName,
+          lastName,
+          travelerType: determineTravelerType(traveler.dateOfBirth),
+          dateOfBirth: traveler.dateOfBirth || undefined,
+          email: trimmedEmail || undefined,
+          phoneCountryCode: phoneComponents.countryCode,
+          phoneNumber: phoneComponents.number,
+          nationality: nationality || undefined,
+          passportNumber:
+            traveler.passportNumber.trim().toUpperCase() || undefined,
+          passportExpiry: traveler.passportExpiry || undefined,
+          passportIssuanceCountry: passportCountry || undefined,
+        };
+      });
+
+      const leadFirstName = travelerPayload[0]?.firstName;
+      const leadLastName = travelerPayload[0]?.lastName;
 
       return {
         itineraryId: itinerary.id,
@@ -469,11 +636,11 @@ export function BookingSheet({
         },
         customerEmail: trimmedEmail || undefined,
         customerName:
-          trimmedFirstName && trimmedLastName
-            ? `${trimmedFirstName} ${trimmedLastName}`
+          leadFirstName && leadLastName
+            ? `${leadFirstName} ${leadLastName}`
             : overrides.customerName,
-        customerPhone: composedPhone || undefined,
-        travelers,
+        customerPhone: trimmedPhone || undefined,
+        travelers: travelerPayload,
         amadeusFlightOffer: itinerary.flight.amadeus?.raw,
         amadeusHotelOffer: itinerary.lodging.amadeus
           ? {
@@ -493,25 +660,16 @@ export function BookingSheet({
         stay: {
           name: itinerary.lodging.name,
           location: itinerary.lodging.location,
+          addressLine: itinerary.lodging.addressLine,
           checkIn: itinerary.lodging.checkIn,
           checkOut: itinerary.lodging.checkOut,
+          nightlyRate: itinerary.lodging.nightlyRate,
+          totalPrice: itinerary.lodging.totalPrice,
         },
         ...overrides,
       };
     },
-    [
-      currency,
-      customerEmail,
-      customerPhone,
-      itinerary,
-      travelerDateOfBirth,
-      travelerFirstName,
-      travelerLastName,
-      travelerNationality,
-      travelerPassportExpiry,
-      travelerPassportIssuanceCountry,
-      travelerPassportNumber,
-    ]
+    [currency, customerEmail, customerPhone, itinerary, travelers]
   );
 
   const handleFinalize = useCallback(
@@ -539,28 +697,29 @@ export function BookingSheet({
         mergedPayload.customerPhone = basePayload.customerPhone;
       }
 
-      if (
-        (!mergedPayload.travelers || mergedPayload.travelers.length === 0) &&
-        mergedPayload.customerName
-      ) {
-        const { firstName, lastName } = splitFullName(
-          mergedPayload.customerName
-        );
-        const phoneComponents = derivePhoneComponents(
-          mergedPayload.customerPhone
-        );
-        if (firstName && lastName) {
-          mergedPayload.travelers = [
-            {
-              firstName,
-              lastName,
-              email: mergedPayload.customerEmail,
-              phoneCountryCode: phoneComponents.countryCode,
-              phoneNumber: phoneComponents.number,
-            },
-          ];
+      if (intent) {
+        const status = intent.status;
+        if (status !== "succeeded" && status !== "requires_capture") {
+          throw new Error(
+            "Payment is not yet confirmed. Complete payment before booking."
+          );
+        }
+
+        if (!mergedPayload.paymentIntentId) {
+          mergedPayload.paymentIntentId = intent.id;
         }
       }
+
+      if (mergedPayload.travelers) {
+        mergedPayload.travelers = mergedPayload.travelers.map((traveler) => ({
+          ...traveler,
+          travelerType:
+            traveler.travelerType ??
+            determineTravelerType(traveler.dateOfBirth),
+        }));
+      }
+
+      ensureTravelersComplete(mergedPayload.travelers);
 
       return finalizeBooking(mergedPayload);
     },
@@ -900,6 +1059,25 @@ export function BookingSheet({
                 <p className="text-lg font-semibold text-emerald-100">
                   {formatCurrency(itinerary.totalPrice.amount, currency)}
                 </p>
+                {priceBreakdown && (
+                  <p className="mt-1 text-xs text-emerald-200/80">
+                    Flight{" "}
+                    {formatCurrency(
+                      priceBreakdown.flight.amount,
+                      priceBreakdown.flight.currency
+                    )}{" "}
+                    + Stay{" "}
+                    {formatCurrency(
+                      priceBreakdown.lodging.amount,
+                      priceBreakdown.lodging.currency
+                    )}
+                  </p>
+                )}
+                {currencyWarning && (
+                  <p className="mt-1 text-xs text-amber-300/80">
+                    {currencyWarning}
+                  </p>
+                )}
               </div>
               <p className="text-xs text-emerald-200">
                 Apple Pay powered by Stripe
@@ -908,179 +1086,296 @@ export function BookingSheet({
           </div>
 
           <section className="mt-6 space-y-4 rounded-2xl border border-slate-800/40 bg-slate-900/50 p-4 text-sm text-slate-300">
-            <div className="flex items-center justify-between">
+            <div className="flex items-start justify-between gap-3">
               <div>
                 <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  Lead traveller contact
+                  Traveller details
                 </h3>
                 <p className="mt-1 text-[11px] text-slate-500">
-                  Required for Amadeus ticketing. Sandbox accepts placeholder
-                  documents if you don&apos;t have real details yet.
+                  Provide passport-ready details for each traveller. Sandbox
+                  accepts placeholder documents if needed.
                 </p>
               </div>
+              <button
+                type="button"
+                onClick={addTraveler}
+                className="rounded-full border border-emerald-500/40 px-3 py-1 text-[11px] uppercase tracking-wide text-emerald-200 transition hover:border-emerald-300 hover:text-emerald-100"
+              >
+                Add traveller
+              </button>
+            </div>
+
+            <div className="space-y-6">
+              {travelers.map((traveler, index) => {
+                const travelerErrors = validationErrors.travelers[index] ?? {};
+                const showFieldError = (value: string) =>
+                  showValidationErrors || value.trim().length > 0;
+
+                const firstNameError = showFieldError(traveler.firstName)
+                  ? travelerErrors.firstName
+                  : undefined;
+                const lastNameError = showFieldError(traveler.lastName)
+                  ? travelerErrors.lastName
+                  : undefined;
+                const dateOfBirthError = showFieldError(traveler.dateOfBirth)
+                  ? travelerErrors.dateOfBirth
+                  : undefined;
+                const nationalityError = showFieldError(traveler.nationality)
+                  ? travelerErrors.nationality
+                  : undefined;
+                const passportNumberError = showFieldError(
+                  traveler.passportNumber
+                )
+                  ? travelerErrors.passportNumber
+                  : undefined;
+                const passportExpiryError = showFieldError(
+                  traveler.passportExpiry
+                )
+                  ? travelerErrors.passportExpiry
+                  : undefined;
+                const passportIssuanceError = showFieldError(
+                  traveler.passportIssuanceCountry
+                )
+                  ? travelerErrors.passportIssuanceCountry
+                  : undefined;
+
+                const firstNameFilled = traveler.firstName.trim().length > 0;
+                const lastNameFilled = traveler.lastName.trim().length > 0;
+                const dateOfBirthFilled =
+                  traveler.dateOfBirth.trim().length > 0;
+                const nationalityFilled =
+                  traveler.nationality.trim().length > 0;
+                const passportNumberFilled =
+                  traveler.passportNumber.trim().length > 0;
+                const passportExpiryFilled =
+                  traveler.passportExpiry.trim().length > 0;
+                const passportIssuanceFilled =
+                  traveler.passportIssuanceCountry.trim().length > 0;
+
+                return (
+                  <div
+                    key={traveler.id}
+                    className="rounded-2xl border border-slate-800/40 bg-slate-950/60 p-4"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-xs uppercase tracking-wide text-slate-500">
+                          {index === 0
+                            ? "Lead traveller"
+                            : `Traveller ${index + 1}`}
+                        </p>
+                        {index === 0 && (
+                          <p className="mt-1 text-[11px] text-slate-500">
+                            Lead traveller details appear on your confirmation
+                            and receipts.
+                          </p>
+                        )}
+                      </div>
+                      {index > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => removeTraveler(index)}
+                          className="rounded-full border border-slate-700 px-2 py-1 text-[11px] uppercase tracking-wide text-slate-400 transition hover:border-rose-500 hover:text-rose-300"
+                        >
+                          Remove
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="mt-4 grid gap-3 sm:grid-cols-2 ">
+                      <label className="space-y-1">
+                        <span className="text-xs uppercase tracking-wide text-slate-500">
+                          First name
+                        </span>
+                        <input
+                          type="text"
+                          value={traveler.firstName}
+                          onChange={(event) =>
+                            updateTraveler(index, {
+                              firstName: event.target.value,
+                            })
+                          }
+                          placeholder="Alex"
+                          aria-invalid={Boolean(firstNameError)}
+                          className={inputClassName(
+                            firstNameError,
+                            firstNameFilled
+                          )}
+                        />
+                        {firstNameError && (
+                          <p className="text-[11px] text-rose-300">
+                            {firstNameError}
+                          </p>
+                        )}
+                      </label>
+                      <label className="space-y-1">
+                        <span className="text-xs uppercase tracking-wide text-slate-500">
+                          Last name
+                        </span>
+                        <input
+                          type="text"
+                          value={traveler.lastName}
+                          onChange={(event) =>
+                            updateTraveler(index, {
+                              lastName: event.target.value,
+                            })
+                          }
+                          placeholder="Walker"
+                          aria-invalid={Boolean(lastNameError)}
+                          className={inputClassName(
+                            lastNameError,
+                            lastNameFilled
+                          )}
+                        />
+                        {lastNameError && (
+                          <p className="text-[11px] text-rose-300">
+                            {lastNameError}
+                          </p>
+                        )}
+                      </label>
+                    </div>
+
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <label className="space-y-1">
+                        <span className="text-xs uppercase tracking-wide text-slate-500">
+                          Date of birth
+                        </span>
+                        <input
+                          type="date"
+                          value={traveler.dateOfBirth}
+                          onChange={(event) =>
+                            updateTraveler(index, {
+                              dateOfBirth: event.target.value,
+                            })
+                          }
+                          aria-invalid={Boolean(dateOfBirthError)}
+                          className={inputClassName(
+                            dateOfBirthError,
+                            dateOfBirthFilled
+                          )}
+                        />
+                        {dateOfBirthError && (
+                          <p className="text-[11px] text-rose-300">
+                            {dateOfBirthError}
+                          </p>
+                        )}
+                      </label>
+                      <label className="space-y-1">
+                        <span className="text-xs uppercase tracking-wide text-slate-500">
+                          Nationality (ISO code)
+                        </span>
+                        <input
+                          type="text"
+                          maxLength={2}
+                          value={traveler.nationality}
+                          onChange={(event) =>
+                            updateTraveler(index, {
+                              nationality: event.target.value.toUpperCase(),
+                            })
+                          }
+                          aria-invalid={Boolean(nationalityError)}
+                          className={inputClassName(
+                            nationalityError,
+                            nationalityFilled,
+                            "uppercase"
+                          )}
+                        />
+                        {nationalityError && (
+                          <p className="text-[11px] text-rose-300">
+                            {nationalityError}
+                          </p>
+                        )}
+                      </label>
+                    </div>
+
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <label className="space-y-1">
+                        <span className="text-xs uppercase tracking-wide text-slate-500">
+                          Passport number
+                        </span>
+                        <input
+                          type="text"
+                          value={traveler.passportNumber}
+                          onChange={(event) =>
+                            updateTraveler(index, {
+                              passportNumber: event.target.value.toUpperCase(),
+                            })
+                          }
+                          placeholder="PA1234567"
+                          aria-invalid={Boolean(passportNumberError)}
+                          className={inputClassName(
+                            passportNumberError,
+                            passportNumberFilled,
+                            "uppercase"
+                          )}
+                        />
+                        {passportNumberError && (
+                          <p className="text-[11px] text-rose-300">
+                            {passportNumberError}
+                          </p>
+                        )}
+                      </label>
+                      <label className="space-y-1">
+                        <span className="text-xs uppercase tracking-wide text-slate-500">
+                          Passport expiry
+                        </span>
+                        <input
+                          type="date"
+                          value={traveler.passportExpiry}
+                          onChange={(event) =>
+                            updateTraveler(index, {
+                              passportExpiry: event.target.value,
+                            })
+                          }
+                          aria-invalid={Boolean(passportExpiryError)}
+                          className={inputClassName(
+                            passportExpiryError,
+                            passportExpiryFilled
+                          )}
+                        />
+                        {passportExpiryError && (
+                          <p className="text-[11px] text-rose-300">
+                            {passportExpiryError}
+                          </p>
+                        )}
+                      </label>
+                    </div>
+
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <label className="space-y-1">
+                        <span className="text-xs uppercase tracking-wide text-slate-500">
+                          Passport issuance country (ISO)
+                        </span>
+                        <input
+                          type="text"
+                          maxLength={2}
+                          value={traveler.passportIssuanceCountry}
+                          onChange={(event) =>
+                            updateTraveler(index, {
+                              passportIssuanceCountry:
+                                event.target.value.toUpperCase(),
+                            })
+                          }
+                          aria-invalid={Boolean(passportIssuanceError)}
+                          className={inputClassName(
+                            passportIssuanceError,
+                            passportIssuanceFilled,
+                            "uppercase"
+                          )}
+                        />
+                        {passportIssuanceError && (
+                          <p className="text-[11px] text-rose-300">
+                            {passportIssuanceError}
+                          </p>
+                        )}
+                      </label>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
 
             <div className="grid gap-3 sm:grid-cols-2">
-              <label className="space-y-1">
-                <span className="text-xs uppercase tracking-wide text-slate-500">
-                  First name
-                </span>
-                <input
-                  type="text"
-                  value={travelerFirstName}
-                  onChange={(event) => setTravelerFirstName(event.target.value)}
-                  placeholder="Alex"
-                  aria-invalid={Boolean(firstNameError)}
-                  className={inputClassName(firstNameError, firstNameFilled)}
-                />
-                {firstNameError && (
-                  <p className="text-[11px] text-rose-300">{firstNameError}</p>
-                )}
-              </label>
-              <label className="space-y-1">
-                <span className="text-xs uppercase tracking-wide text-slate-500">
-                  Last name
-                </span>
-                <input
-                  type="text"
-                  value={travelerLastName}
-                  onChange={(event) => setTravelerLastName(event.target.value)}
-                  placeholder="Walker"
-                  aria-invalid={Boolean(lastNameError)}
-                  className={inputClassName(lastNameError, lastNameFilled)}
-                />
-                {lastNameError && (
-                  <p className="text-[11px] text-rose-300">{lastNameError}</p>
-                )}
-              </label>
-            </div>
-
-            <div className="grid gap-3 sm:grid-cols-2">
-              <label className="space-y-1">
-                <span className="text-xs uppercase tracking-wide text-slate-500">
-                  Date of birth
-                </span>
-                <input
-                  type="date"
-                  value={travelerDateOfBirth}
-                  onChange={(event) =>
-                    setTravelerDateOfBirth(event.target.value)
-                  }
-                  aria-invalid={Boolean(dateOfBirthError)}
-                  className={inputClassName(
-                    dateOfBirthError,
-                    dateOfBirthFilled
-                  )}
-                />
-                {dateOfBirthError && (
-                  <p className="text-[11px] text-rose-300">
-                    {dateOfBirthError}
-                  </p>
-                )}
-              </label>
-              <label className="space-y-1">
-                <span className="text-xs uppercase tracking-wide text-slate-500">
-                  Nationality (ISO code)
-                </span>
-                <input
-                  type="text"
-                  inputMode="text"
-                  maxLength={2}
-                  value={travelerNationality}
-                  onChange={(event) =>
-                    setTravelerNationality(event.target.value.toUpperCase())
-                  }
-                  aria-invalid={Boolean(nationalityError)}
-                  className={inputClassName(
-                    nationalityError,
-                    nationalityFilled,
-                    "uppercase"
-                  )}
-                />
-                {nationalityError && (
-                  <p className="text-[11px] text-rose-300">
-                    {nationalityError}
-                  </p>
-                )}
-              </label>
-            </div>
-
-            <div className="grid gap-3 sm:grid-cols-2">
-              <label className="space-y-1">
-                <span className="text-xs uppercase tracking-wide text-slate-500">
-                  Passport number
-                </span>
-                <input
-                  type="text"
-                  value={travelerPassportNumber}
-                  onChange={(event) =>
-                    setTravelerPassportNumber(event.target.value.toUpperCase())
-                  }
-                  placeholder="PA1234567"
-                  aria-invalid={Boolean(passportNumberError)}
-                  className={inputClassName(
-                    passportNumberError,
-                    passportNumberFilled,
-                    "uppercase"
-                  )}
-                />
-                {passportNumberError && (
-                  <p className="text-[11px] text-rose-300">
-                    {passportNumberError}
-                  </p>
-                )}
-              </label>
-              <label className="space-y-1">
-                <span className="text-xs uppercase tracking-wide text-slate-500">
-                  Passport expiry
-                </span>
-                <input
-                  type="date"
-                  value={travelerPassportExpiry}
-                  onChange={(event) =>
-                    setTravelerPassportExpiry(event.target.value)
-                  }
-                  aria-invalid={Boolean(passportExpiryError)}
-                  className={inputClassName(
-                    passportExpiryError,
-                    passportExpiryFilled
-                  )}
-                />
-                {passportExpiryError && (
-                  <p className="text-[11px] text-rose-300">
-                    {passportExpiryError}
-                  </p>
-                )}
-              </label>
-            </div>
-
-            <div className="grid gap-3 sm:grid-cols-2">
-              <label className="space-y-1">
-                <span className="text-xs uppercase tracking-wide text-slate-500">
-                  Passport issuance country (ISO)
-                </span>
-                <input
-                  type="text"
-                  maxLength={2}
-                  value={travelerPassportIssuanceCountry}
-                  onChange={(event) =>
-                    setTravelerPassportIssuanceCountry(
-                      event.target.value.toUpperCase()
-                    )
-                  }
-                  aria-invalid={Boolean(passportIssuanceError)}
-                  className={inputClassName(
-                    passportIssuanceError,
-                    passportIssuanceFilled,
-                    "uppercase"
-                  )}
-                />
-                {passportIssuanceError && (
-                  <p className="text-[11px] text-rose-300">
-                    {passportIssuanceError}
-                  </p>
-                )}
-              </label>
               <label className="space-y-1">
                 <span className="text-xs uppercase tracking-wide text-slate-500">
                   Contact email
@@ -1097,24 +1392,23 @@ export function BookingSheet({
                   <p className="text-[11px] text-rose-300">{emailError}</p>
                 )}
               </label>
+              <label className="space-y-1">
+                <span className="text-xs uppercase tracking-wide text-slate-500">
+                  Contact phone (E.164)
+                </span>
+                <input
+                  type="tel"
+                  value={customerPhone}
+                  onChange={(event) => setCustomerPhone(event.target.value)}
+                  placeholder="+61412345678"
+                  aria-invalid={Boolean(phoneError)}
+                  className={inputClassName(phoneError, phoneFilled)}
+                />
+                {phoneError && (
+                  <p className="text-[11px] text-rose-300">{phoneError}</p>
+                )}
+              </label>
             </div>
-
-            <label className="space-y-1">
-              <span className="text-xs uppercase tracking-wide text-slate-500">
-                Contact phone (E.164)
-              </span>
-              <input
-                type="tel"
-                value={customerPhone}
-                onChange={(event) => setCustomerPhone(event.target.value)}
-                placeholder="+61412345678"
-                aria-invalid={Boolean(phoneError)}
-                className={inputClassName(phoneError, phoneFilled)}
-              />
-              {phoneError && (
-                <p className="text-[11px] text-rose-300">{phoneError}</p>
-              )}
-            </label>
           </section>
 
           {showSummaryCard && (
@@ -1153,7 +1447,7 @@ export function BookingSheet({
                   </dt>
                   <dd className="text-sm text-slate-100">
                     {dateOfBirthFilled ? (
-                      travelerDateOfBirth
+                      leadDateOfBirth
                     ) : (
                       <span className="text-amber-300">Add date of birth</span>
                     )}
@@ -1166,7 +1460,7 @@ export function BookingSheet({
                   </dt>
                   <dd className="text-sm text-slate-100">
                     {passportNumberFilled ? (
-                      travelerPassportNumber
+                      leadPassportNumber
                     ) : (
                       <span className="text-amber-300">
                         Add passport number
@@ -1175,7 +1469,7 @@ export function BookingSheet({
                   </dd>
                   <p className="text-[11px]">
                     {passportExpiryFilled ? (
-                      <>Expiry · {travelerPassportExpiry}</>
+                      <>Expiry · {leadPassportExpiry}</>
                     ) : (
                       <span className="text-amber-300">
                         Expiry date missing
@@ -1215,6 +1509,75 @@ export function BookingSheet({
                   </p>
                 </div>
               </dl>
+
+              {travelers.length > 1 && (
+                <div className="mt-3 space-y-2">
+                  {travelerSummaryEntries.slice(1).map((entry) => {
+                    return (
+                      <div
+                        key={entry.index}
+                        className="rounded-xl border border-slate-800/40 bg-slate-950/60 p-3"
+                      >
+                        <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                          {entry.role}
+                        </p>
+                        <p className="text-sm text-slate-100">
+                          {entry.name || (
+                            <span className="text-amber-300">
+                              Add first and last name
+                            </span>
+                          )}
+                        </p>
+                        <p className="text-[11px] text-slate-400">
+                          {entry.dateOfBirth ? (
+                            <>DOB · {entry.dateOfBirth}</>
+                          ) : (
+                            <span className="text-amber-300">
+                              Date of birth missing
+                            </span>
+                          )}
+                        </p>
+                        <p className="text-[11px] text-slate-400">
+                          {entry.passportNumber ? (
+                            <>Passport · {entry.passportNumber}</>
+                          ) : (
+                            <span className="text-amber-300">
+                              Passport number missing
+                            </span>
+                          )}
+                        </p>
+                        <p className="text-[11px] text-slate-400">
+                          {entry.passportExpiry ? (
+                            <>Expiry · {entry.passportExpiry}</>
+                          ) : (
+                            <span className="text-amber-300">
+                              Expiry date missing
+                            </span>
+                          )}
+                        </p>
+                        <p className="text-[11px] text-slate-400">
+                          {entry.nationality ? (
+                            <>Nationality · {entry.nationality}</>
+                          ) : (
+                            <span className="text-amber-300">
+                              Nationality missing
+                            </span>
+                          )}
+                        </p>
+                        <p className="text-[11px] text-slate-400">
+                          {entry.passportIssuance ? (
+                            <>Issued · {entry.passportIssuance}</>
+                          ) : (
+                            <span className="text-amber-300">
+                              Issuance country missing
+                            </span>
+                          )}
+                        </p>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </section>
           )}
 
