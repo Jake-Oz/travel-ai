@@ -15,9 +15,10 @@ function formatCurrency(amount: number, currency: string): string {
   }).format(amount);
 }
 
-function formatMoneyValue(
-  value?: { amount: number; currency: string }
-): string | undefined {
+function formatMoneyValue(value?: {
+  amount: number;
+  currency: string;
+}): string | undefined {
   if (!value) return undefined;
   return formatCurrency(value.amount, value.currency);
 }
@@ -62,10 +63,11 @@ function buildTravelerSummary(travelers?: BookingTraveler[]): {
   }
 
   const textLines = travelers.map((traveler, index) => {
-    const name = [traveler.firstName, traveler.lastName]
-      .filter(Boolean)
-      .join(" ")
-      .trim() || `Traveller ${index + 1}`;
+    const name =
+      [traveler.firstName, traveler.lastName]
+        .filter(Boolean)
+        .join(" ")
+        .trim() || `Traveller ${index + 1}`;
 
     const descriptors: string[] = [];
     if (traveler.travelerType) {
@@ -85,10 +87,11 @@ function buildTravelerSummary(travelers?: BookingTraveler[]): {
 
   const htmlItems = travelers
     .map((traveler, index) => {
-      const name = [traveler.firstName, traveler.lastName]
-        .filter(Boolean)
-        .join(" ")
-        .trim() || `Traveller ${index + 1}`;
+      const name =
+        [traveler.firstName, traveler.lastName]
+          .filter(Boolean)
+          .join(" ")
+          .trim() || `Traveller ${index + 1}`;
 
       const meta: string[] = [];
       if (traveler.travelerType) {
@@ -295,12 +298,8 @@ export async function sendBookingConfirmationEmail({
       <tr>
         <td style="padding: 32px;">
           <p style="text-transform: uppercase; letter-spacing: 0.12em; color: #34d399; font-size: 12px; margin: 0;">Booking confirmed</p>
-          <h1 style="font-size: 24px; margin: 12px 0 8px;">${
-            receipt.itineraryHeadline
-          }</h1>
-          <p style="margin: 0 0 16px; color: rgba(248, 250, 252, 0.78);">Reference <strong>${
-            receipt.confirmationNumber
-          }</strong></p>
+          <h1 style="font-size: 24px; margin: 12px 0 8px;">${receipt.itineraryHeadline}</h1>
+          <p style="margin: 0 0 16px; color: rgba(248, 250, 252, 0.78);">Reference <strong>${receipt.confirmationNumber}</strong></p>
 
           <table cellpadding="0" cellspacing="0" width="100%" style="margin: 24px 0; border-collapse: separate; border-spacing: 0 8px;">
             <tr>

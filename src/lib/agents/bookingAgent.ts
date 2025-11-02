@@ -93,16 +93,22 @@ export async function bookingAgentConfirm(
       if (error instanceof AmadeusTravelPartyMismatchError) {
         amadeusFlightOrderError = error.message;
         status = "pending";
-        console.warn("Amadeus flight booking aborted due to traveller mismatch", {
-          supported: error.supportedCount,
-          requested: error.requestedCount,
-        });
+        console.warn(
+          "Amadeus flight booking aborted due to traveller mismatch",
+          {
+            supported: error.supportedCount,
+            requested: error.requestedCount,
+          }
+        );
         amadeusAvailable = false;
       } else {
         let handled = false;
         let failure: unknown = error;
 
-        if (error instanceof AmadeusApiError && isTravelerNotPricedError(error)) {
+        if (
+          error instanceof AmadeusApiError &&
+          isTravelerNotPricedError(error)
+        ) {
           const requestedCount = Math.max(1, payload.travelers.length);
           const supportedCount = Math.max(
             1,
@@ -172,9 +178,7 @@ export async function bookingAgentConfirm(
                 ? failure.category
                 : "unexpected",
             status:
-              failure instanceof AmadeusApiError
-                ? failure.status
-                : undefined,
+              failure instanceof AmadeusApiError ? failure.status : undefined,
           });
           amadeusFlightOrderError = message;
           status = "pending";
@@ -239,10 +243,13 @@ export async function bookingAgentConfirm(
       if (error instanceof AmadeusTravelPartyMismatchError) {
         amadeusHotelBookingError = error.message;
         status = "pending";
-        console.warn("Amadeus hotel booking aborted due to traveller mismatch", {
-          supported: error.supportedCount,
-          requested: error.requestedCount,
-        });
+        console.warn(
+          "Amadeus hotel booking aborted due to traveller mismatch",
+          {
+            supported: error.supportedCount,
+            requested: error.requestedCount,
+          }
+        );
         amadeusAvailable = false;
       } else if (
         error instanceof AmadeusApiError &&
@@ -337,7 +344,10 @@ function extractAmadeusMessage(error: unknown, fallback: string): string {
     const primary = error.primaryError;
     if (primary) {
       const normalizedTitle = (primary.title || "").toUpperCase();
-      if (primary.code === "34651" || normalizedTitle === "SEGMENT SELL FAILURE") {
+      if (
+        primary.code === "34651" ||
+        normalizedTitle === "SEGMENT SELL FAILURE"
+      ) {
         return "The airline could not confirm seats on one of the selected segments. Please refresh the search to pick a new itinerary.";
       }
     }
@@ -398,7 +408,9 @@ function isTravelerNotPricedError(error: AmadeusApiError): boolean {
   return typeof pointer === "string" && pointer.includes("/data/travelers");
 }
 
-function pricedTravelerCountFromError(error: AmadeusApiError): number | undefined {
+function pricedTravelerCountFromError(
+  error: AmadeusApiError
+): number | undefined {
   const pointer = error.primaryError?.source?.pointer;
   if (typeof pointer !== "string") {
     return undefined;

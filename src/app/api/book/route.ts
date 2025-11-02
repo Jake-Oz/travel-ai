@@ -106,16 +106,18 @@ export async function POST(request: Request) {
         if (!traveler.passportExpiry) missing.push("passportExpiry");
         if (!traveler.passportIssuanceCountry)
           missing.push("passportIssuanceCountry");
-        return missing.length
-          ? { index: index + 1, missing }
-          : null;
+        return missing.length ? { index: index + 1, missing } : null;
       })
-      .find((issue): issue is { index: number; missing: string[] } => issue !== null);
+      .find(
+        (issue): issue is { index: number; missing: string[] } => issue !== null
+      );
 
     if (travelerIssue) {
       return NextResponse.json(
         {
-          error: `Traveller ${travelerIssue.index} is missing required fields: ${travelerIssue.missing.join(", ")}`,
+          error: `Traveller ${
+            travelerIssue.index
+          } is missing required fields: ${travelerIssue.missing.join(", ")}`,
         },
         { status: 400 }
       );

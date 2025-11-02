@@ -33,11 +33,13 @@ export function ItineraryCard({ itinerary, onSelect }: ItineraryCardProps) {
           </span>
           {priceBreakdown && (
             <span className="mt-1 block text-[11px] text-emerald-200/80">
-              Flight {formatCurrency(
+              Flight{" "}
+              {formatCurrency(
                 priceBreakdown.flight.amount,
                 priceBreakdown.flight.currency
-              )}
-              {" "}· Stay {formatCurrency(
+              )}{" "}
+              · Stay{" "}
+              {formatCurrency(
                 priceBreakdown.lodging.amount,
                 priceBreakdown.lodging.currency
               )}

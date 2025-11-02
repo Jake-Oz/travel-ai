@@ -116,9 +116,7 @@ function buildItineraries(
             currency: flightCurrency ?? displayCurrency,
           },
           lodging: {
-            amount: Number.parseFloat(
-              lodging.totalPrice.amount.toFixed(2)
-            ),
+            amount: Number.parseFloat(lodging.totalPrice.amount.toFixed(2)),
             currency: lodgingCurrency ?? displayCurrency,
           },
           currencyConsistent,
