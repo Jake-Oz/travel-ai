@@ -64,6 +64,13 @@ export async function persistBooking({
   payload,
   receipt,
 }: PersistBookingInput): Promise<void> {
+  if (!process.env.DATABASE_URL?.trim()) {
+    console.warn(
+      "Skipping booking persistence because DATABASE_URL is not configured."
+    );
+    return;
+  }
+
   const resolvedCurrency =
     toCurrencyCode(receipt.chargedAmount.currency) ??
     toCurrencyCode(payload.chargedAmount.currency) ??
