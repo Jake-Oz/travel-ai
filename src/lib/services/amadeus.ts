@@ -275,6 +275,33 @@ export function isAmadeusApiError(error: unknown): error is AmadeusApiError {
   return error instanceof AmadeusApiError;
 }
 
+type TravelPartyContext = "flight" | "hotel";
+
+export class AmadeusTravelPartyMismatchError extends Error {
+  readonly context: TravelPartyContext;
+  readonly supportedCount: number;
+  readonly requestedCount: number;
+
+  constructor(
+    context: TravelPartyContext,
+    supportedCount: number,
+    requestedCount: number
+  ) {
+    const label = context === "flight" ? "flight offer" : "hotel offer";
+    const supportedLabel = supportedCount === 1 ? "traveller" : "travellers";
+    const requestedLabel = requestedCount === 1 ? "traveller" : "travellers";
+
+    super(
+      `The selected ${label} supports up to ${supportedCount} ${supportedLabel}, but ${requestedCount} ${requestedLabel} were provided.`
+    );
+
+    this.name = "AmadeusTravelPartyMismatchError";
+    this.context = context;
+    this.supportedCount = supportedCount;
+    this.requestedCount = requestedCount;
+  }
+}
+
 function determineAmadeusCategory(
   status: number,
   code?: string
@@ -517,8 +544,12 @@ async function amadeusGet<T>(
   return amadeusFetch<T>({ path, method: "GET", params });
 }
 
-async function amadeusPost<T>(path: string, body: unknown): Promise<T> {
-  return amadeusFetch<T>({ path, method: "POST", body });
+async function amadeusPost<T>(
+  path: string,
+  body: unknown,
+  params?: Record<string, AmadeusQueryParam>
+): Promise<T> {
+  return amadeusFetch<T>({ path, method: "POST", body, params });
 }
 
 async function resolveCityCode(cityName: string): Promise<string> {
@@ -928,12 +959,22 @@ function buildAmadeusTravelerPayload(travelers?: BookingTraveler[]) {
   };
 }
 
+interface PriceFlightOfferOptions {
+  strategy?: "default" | "compatibility";
+}
+
 export async function priceAmadeusFlightOffer(
-  flightOffer: unknown
+  flightOffer: unknown,
+  options?: PriceFlightOfferOptions
 ): Promise<AmadeusFlightPricingResponse | null> {
   if (!isAmadeusConfigured() || !flightOffer) {
     return null;
   }
+
+  const params =
+    options?.strategy === "compatibility"
+      ? { forceClassical: true as AmadeusQueryParam }
+      : undefined;
 
   return amadeusPost<AmadeusFlightPricingResponse>(
     "/v2/shopping/flight-offers/pricing",
@@ -942,7 +983,8 @@ export async function priceAmadeusFlightOffer(
         type: "flight-offers-pricing",
         flightOffers: [flightOffer],
       },
-    }
+    },
+    params
   );
 }
 
@@ -987,12 +1029,13 @@ export async function createAmadeusFlightOrder({
 interface BookHotelOfferOptions {
   offerId: string;
   travelers?: BookingTraveler[];
+  offer?: unknown;
 }
 
-export async function bookAmadeusHotelOffer({
-  offerId,
-  travelers,
-}: BookHotelOfferOptions): Promise<AmadeusHotelBookingResponse | null> {
+export async function bookAmadeusHotelOffer(
+  options: BookHotelOfferOptions
+): Promise<AmadeusHotelBookingResponse | null> {
+  const { offerId, travelers } = options;
   if (!isAmadeusConfigured() || !offerId) {
     return null;
   }
