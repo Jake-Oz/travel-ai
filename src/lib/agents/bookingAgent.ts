@@ -59,7 +59,8 @@ export async function bookingAgentConfirm(
         if (
           attemptError instanceof AmadeusApiError &&
           attemptError.category === "server" &&
-          attempt < MAX_FLIGHT_ORDER_ATTEMPTS
+          attempt < MAX_FLIGHT_ORDER_ATTEMPTS &&
+          !isNonRetryableServerError(attemptError)
         ) {
           const delayMs =
             FLIGHT_ORDER_RETRY_BASE_DELAY_MS * Math.pow(2, attempt - 1);
@@ -211,7 +212,8 @@ export async function bookingAgentConfirm(
         if (
           handlerError instanceof AmadeusApiError &&
           handlerError.category === "server" &&
-          attempt < MAX_HOTEL_ORDER_ATTEMPTS
+          attempt < MAX_HOTEL_ORDER_ATTEMPTS &&
+          !isNonRetryableServerError(handlerError)
         ) {
           const delayMs =
             HOTEL_ORDER_RETRY_BASE_DELAY_MS * Math.pow(2, attempt - 1);
@@ -361,6 +363,11 @@ function extractAmadeusMessage(error: unknown, fallback: string): string {
 
 function wait(durationMs: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, durationMs));
+}
+
+function isNonRetryableServerError(error: AmadeusApiError): boolean {
+  const code = error.primaryError?.code;
+  return code === "38189";
 }
 
 function ensureFlightTravelerCapacity(
