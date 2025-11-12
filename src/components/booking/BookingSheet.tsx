@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   PaymentRequestButtonElement,
   useStripe,
@@ -726,6 +726,32 @@ export function BookingSheet({
     [buildBookingPayload, finalizeBooking]
   );
 
+  const ensureFormIsValidRef = useRef(ensureFormIsValid);
+  const applyPaymentContactRef = useRef(applyPaymentContact);
+  const handleFinalizeRef = useRef(handleFinalize);
+  const onSuccessRef = useRef(onSuccess);
+  const onErrorRef = useRef(onError);
+
+  useEffect(() => {
+    ensureFormIsValidRef.current = ensureFormIsValid;
+  }, [ensureFormIsValid]);
+
+  useEffect(() => {
+    applyPaymentContactRef.current = applyPaymentContact;
+  }, [applyPaymentContact]);
+
+  useEffect(() => {
+    handleFinalizeRef.current = handleFinalize;
+  }, [handleFinalize]);
+
+  useEffect(() => {
+    onSuccessRef.current = onSuccess;
+  }, [onSuccess]);
+
+  useEffect(() => {
+    onErrorRef.current = onError;
+  }, [onError]);
+
   const resolvePaymentIntentId = (
     intent?: PaymentIntent | null,
     fallback?: PaymentIntent | null
@@ -838,7 +864,8 @@ export function BookingSheet({
                 return;
               }
 
-              if (!ensureFormIsValid()) {
+              const ensureValid = ensureFormIsValidRef.current;
+              if (!ensureValid || !ensureValid()) {
                 event.complete("fail");
                 return;
               }
@@ -891,13 +918,18 @@ export function BookingSheet({
                   resolvedIntent
                 );
 
-                applyPaymentContact({
+                applyPaymentContactRef.current?.({
                   name: resolvedName,
                   email: resolvedEmail,
                   phone: resolvedPhone,
                 });
 
-                const receipt: BookingResponse = await handleFinalize(
+                const finalize = handleFinalizeRef.current;
+                if (!finalize) {
+                  throw new Error("Booking flow unavailable. Please retry.");
+                }
+
+                const receipt: BookingResponse = await finalize(
                   {
                     paymentIntentId: resolvePaymentIntentId(
                       paymentIntent,
@@ -910,7 +942,7 @@ export function BookingSheet({
                   resolvedIntent
                 );
                 setPhase("completed");
-                onSuccess(receipt);
+                onSuccessRef.current?.(receipt);
               } catch (error) {
                 console.error("Apple Pay flow failed", error);
                 const message =
@@ -922,7 +954,7 @@ export function BookingSheet({
                 if (!isCompletedSuccessfully) {
                   event.complete("fail");
                 }
-                onError(message);
+                onErrorRef.current?.(message);
               }
             }
           );
@@ -945,7 +977,7 @@ export function BookingSheet({
         if (!isMounted) return;
         setPaymentError(message);
         setPhase("error");
-        onError(message);
+        onErrorRef.current?.(message);
       }
     }
 
@@ -958,15 +990,10 @@ export function BookingSheet({
     };
   }, [
     currency,
-    handleFinalize,
-    applyPaymentContact,
-    ensureFormIsValid,
     itinerary.flight.airline,
     itinerary.id,
     itinerary.lodging.name,
     itinerary.totalPrice.amount,
-    onError,
-    onSuccess,
     stripe,
     totalLabel,
   ]);
